@@ -1,6 +1,8 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import adfuller
+from sklearn.metrics import mean_squared_error as mse
 
 def test_stationarity(timeseries, window_size=250):
 
@@ -30,3 +32,31 @@ def test_stationarity(timeseries, window_size=250):
         dfoutput['Critical Value (%s)'%key] = value
 
     print(dfoutput)
+
+def my_rmse(x,y):
+    return(np.round( np.sqrt(mse(x,y)) ,4))
+
+def create_dataset(df, look_back, look_ahead):
+    xdat, ydat = [], []
+    for i in range(len(df) - look_back -look_ahead):
+        xdat.append(df[i:i+ look_back ,0])
+        ydat.append(df[i+ look_back : i + look_back + look_ahead,0])
+    xdat, ydat = np.array(xdat), np.array(ydat).reshape(-1,look_ahead)
+    return xdat, ydat
+
+def prepare_split(xdat, ydat, cutoff = 5000, timesteps = 50):
+    xtrain, xvalid = xdat[:cutoff,:], xdat[cutoff:,]
+    ytrain, yvalid = ydat[:cutoff,:], ydat[cutoff:,]
+
+    # reshape into [batch size, time steps, dimensionality]
+    xtrain = xtrain.reshape(-1, timesteps, 1)
+    xvalid = xvalid.reshape(-1, timesteps, 1)
+
+    return xtrain, ytrain, xvalid, yvalid
+
+def make_df_from(df):
+  df_out = df[['Date', 'Close']].copy()
+  df_out['Date'] = pd.to_datetime(df_out['Date'])
+  df_out.set_index('Date', inplace=True)
+  return df_out
+
