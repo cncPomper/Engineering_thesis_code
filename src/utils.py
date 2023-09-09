@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import adfuller
 from sklearn.metrics import mean_squared_error as mse
+from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 
 def test_stationarity(timeseries, window_size=250):
 
@@ -60,3 +61,21 @@ def make_df_from(df):
   df_out.set_index('Date', inplace=True)
   return df_out
 
+def assign_values(df, dataset_name, y_pred, y_valid_inversed, period):
+
+  mae = mean_absolute_error(y_pred, y_valid_inversed)
+  mape = mean_absolute_percentage_error(y_pred, y_valid_inversed)
+  rmse = my_rmse(y_pred, y_valid_inversed)
+
+  mae = np.round(mae ,4)
+  mape = np.round(mape ,4)
+
+#   print('RMSE LSTM: ' + str(rmse))
+#   print('MAE LSTM: ' + str(mae))
+#   print('MAPE LSTM: ' + str(mape*100) + '%')
+
+  df.loc[dataset_name, 'MAE'][period] = mae
+  df.loc[dataset_name, 'MAPE'][period] = mape
+  df.loc[dataset_name, 'RMSE'][period] = rmse
+
+  return df
