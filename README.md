@@ -3,3 +3,9 @@
 ## Author: Piotr Kitłowski
 
 All of the code is in the "/src" directory
+
+## TO DO List:
+
+- [ ] LLM Agent to search information about the companies (C/WK, C/K, ...)
+- [ ] API from broker (Bossa)
+- [ ] DB NoSQL
