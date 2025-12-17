@@ -15,3 +15,5 @@ All of the code is in the "/src" directory
 
 ### Sources and motivation
 * [Advances in Financial Machine Learning - Marcos Lopez de Prado](https://lubimyczytac.pl/ksiazka/4993183/advances-in-financial-machine-learning)
+
+TBC...
