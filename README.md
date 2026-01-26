@@ -8,7 +8,7 @@ All of the code is in the "/src" directory
 
 - [ ] YFinance (downloading data)
 - [ ] LLM Agent to search information about the companies (C/WK, C/K, ...)
-- [ ] API from broker (Bossa)
+- [ ] API from broker (Bossa), Revolut or BlackBull
 - [ ] DB NoSQL
 - [ ] Sentiment Analysis
 - [ ] Entity Recognition & Linking
