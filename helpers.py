@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def getBeta(series, sl):
@@ -9,3 +10,6 @@ def getBeta(series, sl):
   beta = pd.stats.moments.rolling_sum(hl, window=2)
   beta = pd.stats.moments.rolling_mean(beta, window=sl)
   return beta.dropna()
+
+def getGamma(series):
+  # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
