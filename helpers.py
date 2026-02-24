@@ -2,6 +2,7 @@ import pandas as pd
 
 
 def getBeta(series, sl):
+  # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
   hl = series[['High', 'Low']].values
   hl = np.log(hl[:, 0] / hl[:, 1]) ** 2
   hl = pd.Series(hl, index=series.index)
