@@ -18,3 +18,7 @@ def getGamma(series):
   gamma = np.log(h2.values / l2.values) ** 2
   gamma = pd.Series(gamma, index=h2.index)
   return gamma.dropna()
+
+def getAlpha(beta, gamma):
+  # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
+  pass
