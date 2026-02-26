@@ -26,8 +26,7 @@ def getAlpha(beta, gamma):
   alpha -= (gamma / denominator) ** .5
   alpha[alpha < 0] = 0 # set negative alphas to 0
   return alpha.dropna()
-  
-  
+
 def corwinSchultz(series, sl=1):
   # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
   pass
