@@ -22,3 +22,7 @@ def getGamma(series):
 def getAlpha(beta, gamma):
   # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
   pass
+
+def corwinSchultz(series, sl=1):
+  # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
+  pass
