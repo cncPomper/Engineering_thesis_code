@@ -33,4 +33,11 @@ def corwinSchultz(series, sl=1):
   beta = getBeta(series, sl)
   gamma = getGamma(series)
   alpha = getAlpha(beta, gamma)
-  spread = 2 * (np.exp(alpha) - 1) / (1 + np.exp(alpha))  
+  spread = 2 * (np.exp(alpha) - 1) / (1 + np.exp(alpha))
+
+  startTime = pd.Series(series.index[0:spread.shape[0]], index=spread.index)
+  spread = pd.concat([spread, startTime], axis=1)
+
+  spread.columns = ['Spread', 'Start_Time'] # 1st loc used to compute beta
+
+  return spread
