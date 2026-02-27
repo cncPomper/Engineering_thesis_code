@@ -29,4 +29,8 @@ def getAlpha(beta, gamma):
 
 def corwinSchultz(series, sl=1):
   # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
-  pass
+  # Note: S < 0 iif alpfa < 0
+  beta = getBeta(series, sl)
+  gamma = getGamma(series)
+  alpha = getAlpha(beta, gamma)
+  spread = 2 * (np.exp(alpha) - 1) / (1 + np.exp(alpha))  
