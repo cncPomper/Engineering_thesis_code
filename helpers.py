@@ -41,3 +41,7 @@ def corwinSchultz(series, sl=1):
   spread.columns = ['Spread', 'Start_Time'] # 1st loc used to compute beta
 
   return spread
+
+def getSigma(beta, gamma):
+  # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
+  pass
