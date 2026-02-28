@@ -44,4 +44,9 @@ def corwinSchultz(series, sl=1):
 
 def getSigma(beta, gamma):
   # Acknowledgement: Advances in Financial Machine Learning - Marcos Lopez de Prado
-  pass
+  k2 = (8 / np.pi) ** .5
+  denominator = 3 - 2 * 2 ** .5
+  sigma = (2 ** -.5 - 1) * beta ** .5 / (k2 * denominator)
+  sigma += (gamma / (k2 ** 2 * denominator)) ** .5
+  sigma[sigma < 0] = 0
+  return sigma
