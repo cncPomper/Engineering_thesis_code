@@ -27,6 +27,11 @@ class RangeFilterIndicator:
         """
         self.sampling_period = sampling_period
         self.range_multiplier = range_multiplier
+
+        # Color definitions (RGB tuples)
+        self.up_color = (255, 255, 255)      # White
+        self.mid_color = (144, 191, 249)     # Light blue
+        self.down_color = (0, 0, 255)        # Blue
     
     def ema(self, data: pd.Series, period: int) -> pd.Series:
         pass
