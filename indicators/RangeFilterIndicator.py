@@ -18,6 +18,13 @@ class RangeFilterIndicator:
     """Range Filter Buy and Sell Indicator for Technical Analysis"""
     
     def __init__(self, sampling_period: int = 100, range_multiplier: float = 3.0):
+        """
+        Initialize the Range Filter Indicator
+        
+        Args:
+            sampling_period: Period for sampling (default: 100)
+            range_multiplier: Multiplier for range (default: 3.0)
+        """
         pass
     
     def ema(self, data: pd.Series, period: int) -> pd.Series:
