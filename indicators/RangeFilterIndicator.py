@@ -25,7 +25,8 @@ class RangeFilterIndicator:
             sampling_period: Period for sampling (default: 100)
             range_multiplier: Multiplier for range (default: 3.0)
         """
-        pass
+        self.sampling_period = sampling_period
+        self.range_multiplier = range_multiplier
     
     def ema(self, data: pd.Series, period: int) -> pd.Series:
         pass
