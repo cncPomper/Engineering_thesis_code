@@ -38,6 +38,15 @@ class RangeFilterIndicator:
         return data.ewm(span=period, adjust=False).mean()
     
     def smooth_average_range(self, source: pd.Series) -> pd.Series:
+        """
+        Calculate Smooth Average Range
+        
+        Args:
+            source: Price source (typically close prices)
+            
+        Returns:
+            Smoothed range values
+        """
         pass
     
     def range_filter(self, source: pd.Series, smooth_range: pd.Series) -> pd.Series:
