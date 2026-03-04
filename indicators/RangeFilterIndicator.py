@@ -47,6 +47,7 @@ class RangeFilterIndicator:
         pass
     
     def analyze(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
+        def calculate_bar_color(row):
+            pass
 
                  
