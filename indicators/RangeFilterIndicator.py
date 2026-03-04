@@ -34,7 +34,8 @@ class RangeFilterIndicator:
         self.down_color = (0, 0, 255)        # Blue
     
     def ema(self, data: pd.Series, period: int) -> pd.Series:
-        pass
+        """Calculate Exponential Moving Average"""
+        return data.ewm(span=period, adjust=False).mean()
     
     def smooth_average_range(self, source: pd.Series) -> pd.Series:
         pass
