@@ -47,7 +47,12 @@ class RangeFilterIndicator:
         Returns:
             Smoothed range values
         """
-        pass
+        wper = self.sampling_period * 2 - 1
+        price_diff = (source - source.shift(1)).abs()
+        avrng = self.ema(price_diff, self.sampling_period)
+        smrng = self.ema(avrng, wper) * self.range_multiplier
+        
+        return smrng
     
     def range_filter(self, source: pd.Series, smooth_range: pd.Series) -> pd.Series:
         pass
