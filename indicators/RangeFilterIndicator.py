@@ -71,6 +71,9 @@ class RangeFilterIndicator:
             previous_filter = filter.iloc[i - 1]
             current_source = source.iloc[i]
             current_range = smooth_range.iloc[i]
+
+            if current_source > previous_filter:
+                filter[i] = max(current_src - current_range, previous_filter)
     
     def calculate_direction(self, filt: pd.Series) -> Tuple[pd.Series, pd.Series]:
         pass
