@@ -55,7 +55,22 @@ class RangeFilterIndicator:
         return smrng
     
     def range_filter(self, source: pd.Series, smooth_range: pd.Series) -> pd.Series:
-        pass
+        """
+        Apply Range Filter to price data
+        
+        Args:
+            source: Price source
+            smooth_range: Smoothed range values
+            
+        Returns:
+            Filtered price values
+        """
+        filter = source.copy()
+
+        for idx in range(1, len(filter)):
+            previous_filter = filter.iloc[i - 1]
+            current_source = source.iloc[i]
+            current_range = smooth_range.iloc[i]
     
     def calculate_direction(self, filt: pd.Series) -> Tuple[pd.Series, pd.Series]:
         pass
