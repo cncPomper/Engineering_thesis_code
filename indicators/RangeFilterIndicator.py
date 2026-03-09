@@ -81,6 +81,15 @@ class RangeFilterIndicator:
         return filter
     
     def calculate_direction(self, filt: pd.Series) -> Tuple[pd.Series, pd.Series]:
+        """
+        Calculate upward and downward directions
+        
+        Args:
+            filt: Filtered price values
+            
+        Returns:
+            Tuple of upward and downward series
+        """
         pass
     
     def analyze(self, df: pd.DataFrame) -> pd.DataFrame:
