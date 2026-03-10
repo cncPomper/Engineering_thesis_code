@@ -90,7 +90,21 @@ class RangeFilterIndicator:
         Returns:
             Tuple of upward and downward series
         """
-        pass
+        upward = pd.Series(0.0, index=filt.index)
+        downward = pd.Series(0.0, index=filt.index)
+
+        for i in range(1, len(filt)):
+            if filt.iloc[i] > filt.iloc[i - 1]:
+                upward.iloc[i] = upward.iloc[i - 1] + 1
+                downward.iloc[i] = 0
+            elif filt.iloc[i] < filt.iloc[i - 1]:
+                downward.iloc[i] = downward.iloc[i - 1] + 1
+                upward.iloc[i] = 0
+            else:
+                upward.iloc[i] = upward.iloc[i - 1]
+                downward.iloc[i] = downward.iloc[i - 1]
+        
+        return upward, downward
     
     def analyze(self, df: pd.DataFrame) -> pd.DataFrame:
         def calculate_bar_color(row):
