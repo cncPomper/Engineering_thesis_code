@@ -107,6 +107,15 @@ class RangeFilterIndicator:
         return upward, downward
     
     def analyze(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Perform complete analysis on OHLCV data
+        
+        Args:
+            df: DataFrame with columns ['open', 'high', 'low', 'close', 'volume']
+            
+        Returns:
+            DataFrame with added indicator columns
+        """
         def calculate_bar_color(row):
             pass
 
