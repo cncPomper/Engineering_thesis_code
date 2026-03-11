@@ -116,6 +116,14 @@ class RangeFilterIndicator:
         Returns:
             DataFrame with added indicator columns
         """
+        # Create a copy to avoid modifying original
+        result = df.copy()
+
+        # Source (using close price)
+        source = result['close']
+
+        # Calculate smooth range
+        result['smooth_range'] = self.smooth_average_range(source)
         def calculate_bar_color(row):
             pass
 
