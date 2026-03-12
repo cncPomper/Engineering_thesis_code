@@ -124,6 +124,9 @@ class RangeFilterIndicator:
 
         # Calculate smooth range
         result['smooth_range'] = self.smooth_average_range(source)
+          
+        # Apply range filter
+        result['filter'] = self.range_filter(source, result['smooth_range'])
         def calculate_bar_color(row):
             pass
 
