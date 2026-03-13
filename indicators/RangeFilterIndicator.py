@@ -127,6 +127,9 @@ class RangeFilterIndicator:
           
         # Apply range filter
         result['filter'] = self.range_filter(source, result['smooth_range'])
+
+        # Calculate direction
+        result['upward'], result['downward'] = self.calculate_direction(result['filter'])
         def calculate_bar_color(row):
             pass
 
