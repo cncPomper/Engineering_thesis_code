@@ -130,6 +130,10 @@ class RangeFilterIndicator:
 
         # Calculate direction
         result['upward'], result['downward'] = self.calculate_direction(result['filter'])
+
+        # Calculate bands
+        result['high_band'] = result['filter'] + result['smooth_range']
+        result['low_band'] = result['filter'] - result['smooth_range']
         def calculate_bar_color(row):
             pass
 
