@@ -143,6 +143,7 @@ class RangeFilterIndicator:
 
         # Calculate bar color
         def calculate_bar_color(row):
-            pass
-
-                 
+            if (row['close'] > row['filter'] and 
+                row['close'] > row['close'].shift(1) and 
+                row['upward'] > 0):
+                return 'up'
