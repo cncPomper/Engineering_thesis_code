@@ -140,6 +140,8 @@ class RangeFilterIndicator:
             lambda row: 'up' if row['upward'] > 0 else ('down' if row['downward'] > 0 else 'mid'),
             axis=1
         )
+
+        # Calculate bar color
         def calculate_bar_color(row):
             pass
 
