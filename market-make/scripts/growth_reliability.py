@@ -22,7 +22,8 @@ This module only needs numpy (already required by yfinance in this project).
 
 import numpy as np
 
-YEARS = 5
+YEARS = 5                    # ideal window; see MIN_YEARS for the accepted minimum
+MIN_YEARS = 3                # yfinance often exposes only 3-4 annual periods
 NET_INCOME_MAX_DROP = 0.15   # criterion 2: max tolerated YoY net income drop
 MARGIN_STDEV_LIMIT = 2.0     # criterion 4: percentage points
 DEBT_EBITDA_LIMIT = 3.0      # criterion 5
@@ -36,8 +37,9 @@ def calculate_growth_reliability_score(data):
     Parameters
     ----------
     data : dict or pandas.DataFrame
-        Five consecutive fiscal years of fundamentals, oldest first.
-        Required keys / columns (each a sequence of 5 floats):
+        Consecutive fiscal years of fundamentals, oldest first — ideally 5
+        years, minimum 3 (all series must have the same length).
+        Required keys / columns (each a sequence of floats):
 
         - ``revenue``           total revenue per year
         - ``net_income``        net income per year
@@ -101,14 +103,16 @@ def _extract_series(data):
         data = {column: data[column].tolist() for column in data.columns}
 
     series = {}
+    years = None
     for key in ('revenue', 'net_income', 'free_cash_flow', 'operating_margin'):
-        series[key] = _validate_series(data, key)
+        series[key] = _validate_series(data, key, years)
+        years = years or len(series[key])
 
     if 'debt_to_ebitda' in data:
-        series['debt_to_ebitda'] = _validate_series(data, 'debt_to_ebitda')
+        series['debt_to_ebitda'] = _validate_series(data, 'debt_to_ebitda', years)
     elif 'total_debt' in data and 'ebitda' in data:
-        total_debt = _validate_series(data, 'total_debt')
-        ebitda = _validate_series(data, 'ebitda')
+        total_debt = _validate_series(data, 'total_debt', years)
+        ebitda = _validate_series(data, 'ebitda', years)
         series['debt_to_ebitda'] = [
             _safe_debt_to_ebitda(debt, earnings)
             for debt, earnings in zip(total_debt, ebitda)
@@ -121,14 +125,19 @@ def _extract_series(data):
     return series
 
 
-def _validate_series(data, key):
+def _validate_series(data, key, expected_length=None):
     if key not in data:
         raise ValueError(f"Missing required series '{key}'")
 
     values = [float(v) for v in data[key]]
-    if len(values) != YEARS:
+    if expected_length is not None and len(values) != expected_length:
         raise ValueError(
-            f"Series '{key}' must contain exactly {YEARS} values, got {len(values)}"
+            f"Series '{key}' must contain {expected_length} values "
+            f"(same as the other series), got {len(values)}"
+        )
+    if not MIN_YEARS <= len(values) <= YEARS:
+        raise ValueError(
+            f"Series '{key}' must contain {MIN_YEARS}-{YEARS} values, got {len(values)}"
         )
 
     return values
@@ -151,7 +160,7 @@ def _check_revenue_consistency(revenue):
     """Criterion 1: YoY revenue growth positive in all 4 transitions."""
     drops = [
         f'Y{i}->Y{i + 1}'
-        for i in range(1, YEARS)
+        for i in range(1, len(revenue))
         if revenue[i] <= revenue[i - 1]
     ]
     return {
@@ -172,7 +181,7 @@ def _check_net_income_stability(net_income):
 
     # All values are > 0 here, so the relative drop is well-defined
     big_drops = []
-    for i in range(1, YEARS):
+    for i in range(1, len(net_income)):
         drop = (net_income[i - 1] - net_income[i]) / net_income[i - 1]
         if drop > NET_INCOME_MAX_DROP:
             big_drops.append(f'Y{i}->Y{i + 1} ({drop:.0%})')
@@ -237,7 +246,7 @@ def _check_growth_linearity(revenue):
     Criterion 6: fit revenue = a*year + b over the 5 years and require
     R2 >= 0.85, i.e. a highly predictable, non-cyclical growth path.
     """
-    x = np.arange(YEARS, dtype=float)
+    x = np.arange(len(revenue), dtype=float)
     y = np.asarray(revenue, dtype=float)
 
     ss_tot = float(np.sum((y - y.mean()) ** 2))

@@ -24,6 +24,11 @@ class ScreenerController extends Controller
                 $metrics['name'] = $company->name ?? null;
                 $metrics['sector'] = $company->sector ?? null;
                 $metrics['industry'] = $company->industry ?? null;
+                $metrics['revenue_growth'] = $company->revenue_growth ?? null;
+                $metrics['eps_growth'] = $company->eps_growth ?? null;
+                $metrics['reliability_score'] = $company->reliability_score ?? null;
+                $metrics['reliability_max'] = $company->reliability_max ?? null;
+                $metrics['reliability_checks'] = $company->reliability_checks ?? null;
                 $results[] = $metrics;
             }
         }
@@ -58,14 +63,19 @@ class ScreenerController extends Controller
         $return3m = $this->returnOverDays($rows, 91);
         $return6m = $this->returnOverDays($rows, 182);
 
+        // null = not computable with the available history (excluded from the score)
         $riskChecks = [
-            '3M return positive' => $return3m !== null && $return3m > 0,
-            '6M return positive' => $return6m !== null && $return6m > 0,
-            'Price above 50-day EMA' => $ema50d !== null && $lastClose > $ema50d,
-            'Price above 200-day EMA' => $ema200d !== null && $lastClose > $ema200d,
-            'Volatility below 40%' => $volatility !== null && $volatility < 40,
-            'Max drawdown above -30%' => $maxDrawdown !== null && $maxDrawdown > -30,
+            '3M return positive' => $return3m === null ? null : $return3m > 0,
+            '6M return positive' => $return6m === null ? null : $return6m > 0,
+            'Price above 50-day EMA' => $ema50d === null ? null : $lastClose > $ema50d,
+            'Price above 200-day EMA' => $ema200d === null ? null : $lastClose > $ema200d,
+            'Volatility below 40%' => $volatility === null ? null : $volatility < 40,
+            'Max drawdown above -30%' => $maxDrawdown === null ? null : $maxDrawdown > -30,
         ];
+
+        $evaluable = array_filter($riskChecks, function ($passed) {
+            return $passed !== null;
+        });
 
         return [
             'symbol' => $symbol,
@@ -76,13 +86,47 @@ class ScreenerController extends Controller
             'return_6m' => $return6m,
             'return_1y' => $this->returnOverDays($rows, 365),
             'growth' => $growth,
-            'risk_score' => count(array_filter($riskChecks)),
+            'risk_score' => count(array_filter($evaluable)),
+            'risk_max' => count($evaluable),
             'risk_checks' => $riskChecks,
+            'outlook' => $this->trendProjection($rows->pluck('close')->all()),
+            'vs_ema200' => $ema200d !== null ? round(($lastClose / $ema200d - 1) * 100, 2) : null,
             'ema_trend' => $ema50w !== null ? ($lastClose > $ema50w ? 'UP' : 'DOWN') : null,
             'off_52w_high' => $high52w > 0 ? round(($lastClose / $high52w - 1) * 100, 2) : null,
             'volatility' => $volatility,
             'max_drawdown' => $maxDrawdown,
         ];
+    }
+
+    /**
+     * Outlook: fit a least-squares line through the last ~6 months of closes
+     * and project it 12 months (252 trading days) ahead, as % vs the last close.
+     */
+    private function trendProjection(array $closes, int $window = 126, int $daysAhead = 252)
+    {
+        $closes = array_slice($closes, -$window);
+        $n = count($closes);
+        $last = $n > 0 ? $closes[$n - 1] : 0;
+
+        if ($n < 30 || $last <= 0) {
+            return null;
+        }
+
+        $xMean = ($n - 1) / 2;
+        $yMean = array_sum($closes) / $n;
+
+        $num = 0;
+        $den = 0;
+        foreach ($closes as $i => $y) {
+            $num += ($i - $xMean) * ($y - $yMean);
+            $den += ($i - $xMean) ** 2;
+        }
+
+        $slope = $den > 0 ? $num / $den : 0;
+        $intercept = $yMean - $slope * $xMean;
+        $projected = $intercept + $slope * ($n - 1 + $daysAhead);
+
+        return round(($projected / $last - 1) * 100, 2);
     }
 
     private function returnOverDays($rows, $days)

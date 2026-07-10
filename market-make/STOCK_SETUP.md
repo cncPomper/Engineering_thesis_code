@@ -1,5 +1,9 @@
 # Stock API Setup Guide
 
+> ⚠️ **Outdated** — this guide predates several changes (grid visualization was
+> removed, symbols are now full yfinance tickers like `CDR.WA`, fundamentals
+> were added). See the up-to-date instructions in [README.md](README.md).
+
 ## Overview
 This API provides stock data with grid-based visualization for price range analysis. Data is stored daily (1D) with automatic aggregation to weekly (1W) and monthly (1M).
 

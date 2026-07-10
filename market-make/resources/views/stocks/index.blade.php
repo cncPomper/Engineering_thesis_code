@@ -123,6 +123,40 @@
             padding: 30px;
         }
 
+        .quick-analysis {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 18px 10px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .qa-item {
+            flex: 1;
+            cursor: help;
+        }
+
+        .qa-letter {
+            font-size: 22px;
+            font-weight: 800;
+            color: #444;
+            margin-bottom: 6px;
+        }
+
+        .qa-value {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .qa-value.green { color: #26a69a; }
+        .qa-value.orange { color: #ff9800; }
+        .qa-value.red { color: #ef5350; }
+        .qa-value.muted { color: #aaa; }
+
         .chart-section {
             margin-bottom: 40px;
         }
@@ -246,6 +280,33 @@
             <div id="loading" class="loading" style="display: none;">Loading data...</div>
 
             <div id="mainChart" style="display: none;">
+                <div class="quick-analysis" id="quickAnalysis" style="display: none;">
+                    <div class="qa-item" title="Growth: 5-year revenue growth (annualized, from financial statements)">
+                        <div class="qa-letter">G</div>
+                        <div class="qa-value" id="qaG">—</div>
+                    </div>
+                    <div class="qa-item" id="qaRItem" title="Risk: 5-year fundamental reliability checklist">
+                        <div class="qa-letter">R</div>
+                        <div class="qa-value" id="qaR">—</div>
+                    </div>
+                    <div class="qa-item" title="Outlook: 12-month price projection from the 6-month linear trend">
+                        <div class="qa-letter">O</div>
+                        <div class="qa-value" id="qaO">—</div>
+                    </div>
+                    <div class="qa-item" title="Margin of safety: distance from the 52-week high">
+                        <div class="qa-letter">W</div>
+                        <div class="qa-value" id="qaW">—</div>
+                    </div>
+                    <div class="qa-item" title="Trend strength: price vs 200-day EMA">
+                        <div class="qa-letter">T</div>
+                        <div class="qa-value" id="qaT">—</div>
+                    </div>
+                    <div class="qa-item" title="50-week EMA trend: price above (UP) or below (DOWN) its 50-week EMA">
+                        <div class="qa-letter">H</div>
+                        <div class="qa-value" id="qaH">—</div>
+                    </div>
+                </div>
+
                 <div class="chart-section">
                     <div class="chart-title">
                         <span id="chartTitle">Daily Price Movement</span>
@@ -353,6 +414,7 @@
 
                 mainChartDiv.style.display = 'block';
 
+                renderQuickAnalysis(symbol);
                 renderChart(currentData);
             } catch (error) {
                 loadingDiv.style.display = 'none';
@@ -557,6 +619,74 @@
             return companyNames[symbol] || symbol;
         }
 
+        // Quick Analysis (GROWTH) metrics per symbol, filled from /api/screener
+        const quickMetrics = {};
+
+        async function loadQuickAnalysis() {
+            try {
+                const response = await fetch('/api/screener');
+                if (!response.ok) return;
+                (await response.json()).forEach(m => { quickMetrics[m.symbol] = m; });
+            } catch (e) {
+                // Quick Analysis is optional decoration; the chart still works without it
+            }
+        }
+
+        function qaSet(id, text, cls) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = 'qa-value ' + cls;
+        }
+
+        function qaPct(v, greenAt, orangeAt) {
+            if (v === null || v === undefined) return ['—', 'muted'];
+            const cls = v >= greenAt ? 'green' : v >= orangeAt ? 'orange' : 'red';
+            return [(v >= 0 ? '+' : '') + v.toFixed(1) + '%', cls];
+        }
+
+        function renderQuickAnalysis(symbol) {
+            const box = document.getElementById('quickAnalysis');
+            const m = quickMetrics[symbol];
+
+            if (!m) {
+                box.style.display = 'none';
+                return;
+            }
+            box.style.display = 'flex';
+
+            // G: 5Y revenue growth from fundamentals (run "php artisan stocks:fundamentals")
+            qaSet('qaG', ...qaPct(m.revenue_growth, 10, 0));
+            qaSet('qaO', ...qaPct(m.outlook, 10, 0));
+            qaSet('qaW', ...qaPct(m.off_52w_high, -10, -25));
+            qaSet('qaT', ...qaPct(m.vs_ema200, 0, 0));
+
+            // R: fundamental reliability checklist, falling back to price-based checks
+            if (m.reliability_max) {
+                const ratio = m.reliability_score / m.reliability_max;
+                qaSet('qaR', `${m.reliability_score}/${m.reliability_max}`,
+                    ratio >= 0.8 ? 'green' : ratio >= 0.5 ? 'orange' : 'red');
+                document.getElementById('qaRItem').title =
+                    'Risk: 5-year fundamental reliability checklist\n' +
+                    Object.entries(m.reliability_checks).map(([name, check]) =>
+                        (check.passed ? '✓ ' : '✗ ') + name + ' — ' + check.details
+                    ).join('\n');
+            } else if (m.risk_max) {
+                const ratio = m.risk_score / m.risk_max;
+                qaSet('qaR', `${m.risk_score}/${m.risk_max}`,
+                    ratio >= 0.8 ? 'green' : ratio >= 0.5 ? 'orange' : 'red');
+                document.getElementById('qaRItem').title =
+                    'Risk: price-based checks (no fundamentals fetched yet)\n' +
+                    Object.entries(m.risk_checks).map(([name, passed]) =>
+                        passed === null ? '– ' + name + ' (not enough history)' : (passed ? '✓ ' : '✗ ') + name
+                    ).join('\n');
+            } else {
+                qaSet('qaR', '—', 'muted');
+            }
+
+            qaSet('qaH', m.ema_trend || '—',
+                m.ema_trend === 'UP' ? 'green' : m.ema_trend === 'DOWN' ? 'red' : 'muted');
+        }
+
         // Set default dates
         function setDefaultDates() {
             const today = new Date();
@@ -576,8 +706,8 @@
         // Initialize dates on page load
         setDefaultDates();
 
-        // Initial load: populate the symbol list from the DB, then fetch data
-        loadSymbols()
+        // Initial load: populate the symbol list and GROWTH metrics, then fetch data
+        Promise.all([loadSymbols(), loadQuickAnalysis()])
             .then(fetchData)
             .catch(error => {
                 loadingDiv.style.display = 'none';

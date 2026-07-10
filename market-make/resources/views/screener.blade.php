@@ -117,6 +117,11 @@
             padding: 30px;
         }
 
+        /* Horizontal sweeper: columns that do not fit stay reachable by scrolling */
+        .table-wrap {
+            overflow-x: auto;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -250,6 +255,7 @@
             <div id="error" class="error" style="display: none;"></div>
             <div id="loading" class="loading">Loading screener data...</div>
 
+            <div class="table-wrap">
             <table id="screenerTable" style="display: none;">
                 <thead>
                     <tr>
@@ -259,8 +265,9 @@
                         <th data-key="return_3m" title="Return over the last 3 months">3M</th>
                         <th data-key="return_6m" title="Return over the last 6 months">6M</th>
                         <th data-key="return_1y" title="Return over the last year">1Y</th>
-                        <th data-key="growth" title="Annualized price growth rate (CAGR) over the full history">G</th>
-                        <th data-key="risk_score" title="Risk checklist: how many of 6 health checks pass">R</th>
+                        <th data-key="revenue_growth" title="Revenue growth 5Y: annualized revenue growth from financial statements (php artisan stocks:fundamentals)">G</th>
+                        <th data-key="growth" title="Annualized price growth rate (CAGR) over the full history">CAGR</th>
+                        <th data-key="r_score" title="Reliability: 5Y fundamental checklist when available, otherwise price-based health checks">R</th>
                         <th data-key="off_52w_high" title="Distance from the 52-week high">Δ 52W High</th>
                         <th data-key="volatility" title="Annualized volatility of daily returns">Volatility</th>
                         <th data-key="ema_trend" title="Price vs 50-week EMA">H</th>
@@ -268,6 +275,7 @@
                 </thead>
                 <tbody id="screenerBody"></tbody>
             </table>
+            </div>
             <div id="empty" class="empty" style="display: none;">No stocks match the current filters.</div>
         </div>
     </div>
@@ -309,10 +317,11 @@
             return 'red';
         }
 
-        function riskClass(v) {
-            if (v === null || v === undefined) return 'muted';
-            if (v >= 5) return 'green';
-            if (v >= 3) return 'orange';
+        function riskClass(score, max) {
+            if (!max) return 'muted';
+            const ratio = score / max;
+            if (ratio >= 0.8) return 'green';
+            if (ratio >= 0.5) return 'orange';
             return 'red';
         }
 
@@ -321,9 +330,17 @@
             return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
         }
 
-        function riskTooltip(checks) {
-            return Object.entries(checks)
-                .map(([name, passed]) => (passed ? '✓ ' : '✗ ') + name)
+        function riskTooltip(row) {
+            if (row.r_fundamental) {
+                return '5Y fundamental reliability:\n' + Object.entries(row.r_checks)
+                    .map(([name, check]) => (check.passed ? '✓ ' : '✗ ') + name + ' — ' + check.details)
+                    .join('\n');
+            }
+            return 'Price-based checks (no fundamentals fetched yet):\n' + Object.entries(row.r_checks)
+                .map(([name, passed]) => {
+                    if (passed === null) return '– ' + name + ' (not enough history)';
+                    return (passed ? '✓ ' : '✗ ') + name;
+                })
                 .join('\n');
         }
 
@@ -338,8 +355,8 @@
         function applyFilters(rows) {
             const f = currentFilters();
             return rows.filter(r => {
-                if (f.minGrowth !== null && (r.growth === null || r.growth < f.minGrowth)) return false;
-                if (f.minRisk !== null && r.risk_score < f.minRisk) return false;
+                if (f.minGrowth !== null && (r.revenue_growth === null || r.revenue_growth < f.minGrowth)) return false;
+                if (f.minRisk !== null && r.r_score < f.minRisk) return false;
                 if (f.trend !== null && r.ema_trend !== f.trend) return false;
                 return true;
             });
@@ -375,8 +392,9 @@
                     <td class="${pctClass(r.return_3m)}">${fmtPct(r.return_3m)}</td>
                     <td class="${pctClass(r.return_6m)}">${fmtPct(r.return_6m)}</td>
                     <td class="${pctClass(r.return_1y)}">${fmtPct(r.return_1y)}</td>
+                    <td class="${growthClass(r.revenue_growth)}">${fmtPct(r.revenue_growth)}</td>
                     <td class="${growthClass(r.growth)}">${fmtPct(r.growth)}</td>
-                    <td class="${riskClass(r.risk_score)}" title="${riskTooltip(r.risk_checks)}">${r.risk_score}/6</td>
+                    <td class="${riskClass(r.r_score, r.r_max)}" title="${riskTooltip(r)}">${r.r_max ? `${r.r_score}/${r.r_max}` : '—'}</td>
                     <td class="${pctClass(r.off_52w_high)}">${fmtPct(r.off_52w_high)}</td>
                     <td>${r.volatility === null ? '—' : r.volatility.toFixed(1) + '%'}</td>
                     <td class="${r.ema_trend === 'UP' ? 'green' : r.ema_trend === 'DOWN' ? 'red' : 'muted'}">${r.ema_trend || '—'}</td>
@@ -436,7 +454,14 @@
                 if (!response.ok) {
                     throw new Error('Failed to load screener data');
                 }
-                allRows = await response.json();
+                // Normalize R: fundamental reliability when available, else price-based checks
+                allRows = (await response.json()).map(r => ({
+                    ...r,
+                    r_score: r.reliability_max ? r.reliability_score : r.risk_score,
+                    r_max: r.reliability_max || r.risk_max,
+                    r_checks: r.reliability_max ? r.reliability_checks : r.risk_checks,
+                    r_fundamental: !!r.reliability_max,
+                }));
                 loadingDiv.style.display = 'none';
 
                 if (!allRows.length) {
