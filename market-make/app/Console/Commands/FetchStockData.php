@@ -9,7 +9,7 @@ use Carbon\Carbon;
 
 class FetchStockData extends Command
 {
-    protected $signature = 'stocks:fetch {--symbols=CDR,PKN,MBK,PLY,KGH,TPE} {--start=} {--end=}';
+    protected $signature = 'stocks:fetch {--symbols=CDR,PKN,MBK,PLY,KGH,TPE} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
     protected $description = 'Fetch stock data from yfinance for specified symbols';
 
     public function handle()
@@ -83,9 +83,31 @@ class FetchStockData extends Command
             return;
         }
 
+        $existingDates = Stock::where('symbol', $symbol)
+            ->pluck('date')
+            ->map(function ($date) {
+                return Carbon::parse($date)->format('Y-m-d');
+            })
+            ->flip();
+
+        $force = $this->option('force');
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
         foreach ($data as $row) {
+            $exists = isset($existingDates[$row['date']]);
+
+            if ($exists && !$force) {
+                $skipped++;
+                continue;
+            }
+
+            // Pass a Carbon instance so the lookup matches the stored datetime
+            // format ('Y-m-d H:i:s'); a plain 'Y-m-d' string never matches and
+            // updateOrCreate would try to insert a duplicate
             Stock::updateOrCreate(
-                ['symbol' => $symbol, 'date' => $row['date']],
+                ['symbol' => $symbol, 'date' => Carbon::parse($row['date'])],
                 [
                     'open' => $row['open'],
                     'high' => $row['high'],
@@ -94,8 +116,17 @@ class FetchStockData extends Command
                     'volume' => $row['volume'],
                 ]
             );
+
+            $exists ? $updated++ : $created++;
         }
 
-        $this->info("✓ Imported " . count($data) . " records for $symbol");
+        $summary = "✓ $symbol: $created new";
+        if ($updated > 0) {
+            $summary .= ", $updated refreshed";
+        }
+        if ($skipped > 0) {
+            $summary .= ", $skipped already in database (use --force to refresh)";
+        }
+        $this->info($summary);
     }
 }
