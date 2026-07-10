@@ -15,18 +15,36 @@ class FetchStockData extends Command
     public function handle()
     {
         $symbols = explode(',', $this->option('symbols'));
-        $start = $this->option('start') ?? Carbon::now()->subMonths(3)->format('Y-m-d');
+        $start = $this->option('start');
         $end = $this->option('end') ?? Carbon::now()->format('Y-m-d');
 
         $this->info("Fetching stock data for: " . implode(', ', $symbols));
-        $this->info("Period: $start to $end");
 
         foreach ($symbols as $symbol) {
             $symbol = trim($symbol);
-            $this->fetchSymbolData($symbol, $start, $end);
+            $symbolStart = $start ?? $this->resolveStartDate($symbol);
+
+            if ($symbolStart > $end) {
+                $this->info("✓ $symbol is already up to date (latest record: " . Carbon::parse($symbolStart)->subDay()->format('Y-m-d') . ")");
+                continue;
+            }
+
+            $this->info("Period for $symbol: $symbolStart to $end");
+            $this->fetchSymbolData($symbol, $symbolStart, $end);
         }
 
         $this->info('Stock data fetch completed!');
+    }
+
+    private function resolveStartDate($symbol)
+    {
+        $latestDate = Stock::where('symbol', $symbol)->max('date');
+
+        if ($latestDate) {
+            return Carbon::parse($latestDate)->addDay()->format('Y-m-d');
+        }
+
+        return Carbon::now()->subMonths(3)->format('Y-m-d');
     }
 
     private function fetchSymbolData($symbol, $start, $end)
