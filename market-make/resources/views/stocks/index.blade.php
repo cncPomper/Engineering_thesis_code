@@ -211,7 +211,7 @@
     <div class="container">
         <div class="header">
             <h1>📈 Stock Market Visualization</h1>
-            <p>Interactive candlestick chart with volume — powered by data from GPW</p>
+            <p>Interactive candlestick chart with volume — powered by yfinance data</p>
             <nav>
                 <a href="/stocks">📈 Chart</a>
                 <a href="/screener">🔎 Screener</a>
@@ -230,7 +230,7 @@
             </div>
 
             <div class="control-group">
-                <label for="symbol">Stock (GPW):</label>
+                <label for="symbol">Stock:</label>
                 <select id="symbol"></select>
             </div>
 
@@ -308,9 +308,10 @@
 
             symbolSelect.innerHTML = '';
             symbols.forEach(s => {
+                if (s.name) companyNames[s.symbol] = s.name;
                 const option = document.createElement('option');
                 option.value = s.symbol;
-                option.textContent = `${s.symbol} - ${getCompanyName(s.symbol)}`;
+                option.textContent = `${s.symbol} - ${getCompanyName(s.symbol)}` + (s.sector ? ` (${s.sector})` : '');
                 symbolSelect.appendChild(option);
             });
         }
@@ -549,17 +550,11 @@
             return labels[tf] || tf;
         }
 
+        // Filled from /api/stocks/symbols (names come from yfinance via the companies table)
+        const companyNames = {};
+
         function getCompanyName(symbol) {
-            const names = {
-                'MOC': 'Molecure (Biotech)',
-                'CDR': 'CD Projekt Red (Gaming)',
-                'PKN': 'PKN Orlen (Energy)',
-                'MBK': 'mBank (Banking)',
-                'PLY': 'Play Communications (Telecom)',
-                'KGH': 'KGHM Polska Miedź (Mining)',
-                'TPE': 'Tauron Polska Energia (Energy)'
-            };
-            return names[symbol] || symbol;
+            return companyNames[symbol] || symbol;
         }
 
         // Set default dates

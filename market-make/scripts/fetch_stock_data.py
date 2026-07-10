@@ -8,12 +8,10 @@ def fetch_stock_data(symbol, start_date, end_date):
     """
     Fetch stock data from yfinance for a given symbol and date range.
     Both dates are inclusive (yfinance treats `end` as exclusive, so shift it by one day).
-    For GPW stocks, append .WA suffix (Warsaw exchange)
+    The symbol is used verbatim as the yfinance ticker, so any exchange works:
+    NVDA (Nasdaq), CDR.WA (Warsaw), 3661.TW (Taiwan), BMW.DE (Xetra), ...
     """
     try:
-        # Add .WA suffix for Polish stocks (GPW exchange)
-        symbol = f"{symbol}.WA"
-
         end_exclusive = (datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
 
         ticker = yf.Ticker(symbol)
@@ -38,14 +36,32 @@ def fetch_stock_data(symbol, start_date, end_date):
         print(json.dumps({'error': str(e)}), file=sys.stderr)
         return []
 
+def fetch_company_info(symbol):
+    """
+    Fetch company metadata (name, sector, industry) for visualization.
+    Returns None values if yfinance has no info for the ticker.
+    """
+    try:
+        info = yf.Ticker(symbol).info or {}
+        return {
+            'name': info.get('longName') or info.get('shortName'),
+            'sector': info.get('sector'),
+            'industry': info.get('industry'),
+        }
+    except Exception as e:
+        print(json.dumps({'error': str(e)}), file=sys.stderr)
+        return {'name': None, 'sector': None, 'industry': None}
+
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print(json.dumps([]))
+        print(json.dumps({'info': None, 'data': []}))
         sys.exit(0)
 
     symbol = sys.argv[1]
     start_date = sys.argv[2]
     end_date = sys.argv[3]
 
-    data = fetch_stock_data(symbol, start_date, end_date)
-    print(json.dumps(data))
+    print(json.dumps({
+        'info': fetch_company_info(symbol),
+        'data': fetch_stock_data(symbol, start_date, end_date),
+    }))

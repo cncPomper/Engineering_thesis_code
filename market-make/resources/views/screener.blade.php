@@ -206,7 +206,7 @@
     <div class="container">
         <div class="header">
             <h1>🔎 Stock Screener</h1>
-            <p>Growth and risk metrics computed from GPW price history</p>
+            <p>Growth and risk metrics computed from price history</p>
             <nav>
                 <a href="/stocks">📈 Chart</a>
                 <a href="/screener">🔎 Screener</a>
@@ -289,17 +289,12 @@
         const trendSelect = document.getElementById('trend');
         const growthPresetBtn = document.getElementById('growthPreset');
 
-        function getCompanyName(symbol) {
-            const names = {
-                'MOC': 'Molecure (Biotech)',
-                'CDR': 'CD Projekt Red (Gaming)',
-                'PKN': 'PKN Orlen (Energy)',
-                'MBK': 'mBank (Banking)',
-                'PLY': 'Play Communications (Telecom)',
-                'KGH': 'KGHM Polska Miedź (Mining)',
-                'TPE': 'Tauron Polska Energia (Energy)'
-            };
-            return names[symbol] || symbol;
+        function stockSubline(r) {
+            const parts = [r.symbol];
+            if (r.sector) parts.push(r.sector);
+            if (r.industry && r.industry !== r.sector) parts.push(r.industry);
+            parts.push(r.last_date);
+            return parts.join(' · ');
         }
 
         function pctClass(v) {
@@ -372,8 +367,8 @@
             tbody.innerHTML = rows.map(r => `
                 <tr>
                     <td class="stock-name">
-                        <a href="/stocks">${getCompanyName(r.symbol)}</a><br>
-                        <span class="stock-symbol">GPW:${r.symbol} · ${r.last_date}</span>
+                        <a href="/stocks">${r.name || r.symbol}</a><br>
+                        <span class="stock-symbol">${stockSubline(r)}</span>
                     </td>
                     <td>${r.last_close.toFixed(2)}</td>
                     <td class="${pctClass(r.return_1m)}">${fmtPct(r.return_1m)}</td>

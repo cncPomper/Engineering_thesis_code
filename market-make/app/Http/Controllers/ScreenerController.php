@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\Stock;
 
 class ScreenerController extends Controller
@@ -9,6 +10,7 @@ class ScreenerController extends Controller
     public function index()
     {
         $symbols = Stock::select('symbol')->distinct()->orderBy('symbol')->pluck('symbol');
+        $companies = Company::get()->keyBy('symbol');
 
         $results = [];
         foreach ($symbols as $symbol) {
@@ -17,7 +19,12 @@ class ScreenerController extends Controller
                 ->get(['date', 'close', 'high', 'low', 'volume']);
 
             if ($rows->count() >= 2) {
-                $results[] = $this->computeMetrics($symbol, $rows);
+                $metrics = $this->computeMetrics($symbol, $rows);
+                $company = $companies->get($symbol);
+                $metrics['name'] = $company->name ?? null;
+                $metrics['sector'] = $company->sector ?? null;
+                $metrics['industry'] = $company->industry ?? null;
+                $results[] = $metrics;
             }
         }
 

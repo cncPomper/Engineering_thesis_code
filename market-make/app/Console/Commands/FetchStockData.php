@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Company;
 use App\Models\Stock;
 use Illuminate\Console\Command;
 use Symfony\Component\Process\Process;
@@ -9,8 +10,8 @@ use Carbon\Carbon;
 
 class FetchStockData extends Command
 {
-    protected $signature = 'stocks:fetch {--symbols=CDR,PKN,MBK,PLY,KGH,TPE} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
-    protected $description = 'Fetch stock data from yfinance for specified symbols';
+    protected $signature = 'stocks:fetch {--symbols=CDR.WA,PKN.WA,MBK.WA,PLY.WA,KGH.WA,TPE.WA} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
+    protected $description = 'Fetch stock data from yfinance for the given tickers (any exchange, e.g. NVDA, CDR.WA, BMW.DE)';
 
     public function handle()
     {
@@ -25,8 +26,14 @@ class FetchStockData extends Command
             $symbolStart = $start ?? $this->resolveStartDate($symbol);
 
             if ($symbolStart > $end) {
-                $this->info("✓ $symbol is already up to date (latest record: " . Carbon::parse($symbolStart)->subDay()->format('Y-m-d') . ")");
-                continue;
+                if (Company::where('symbol', $symbol)->exists()) {
+                    $this->info("✓ $symbol is already up to date (latest record: " . Carbon::parse($symbolStart)->subDay()->format('Y-m-d') . ")");
+                    continue;
+                }
+
+                // Prices are current but company info is missing — fetch a single
+                // day anyway to pick up the metadata (existing rows are skipped)
+                $symbolStart = $end;
             }
 
             $this->info("Period for $symbol: $symbolStart to $end");
@@ -76,9 +83,23 @@ class FetchStockData extends Command
             return;
         }
 
-        $data = json_decode($process->getOutput(), true);
+        $payload = json_decode($process->getOutput(), true);
+        $data = is_array($payload) ? ($payload['data'] ?? []) : [];
+        $info = is_array($payload) ? ($payload['info'] ?? null) : null;
 
-        if (!is_array($data) || empty($data)) {
+        if (!empty($info['name'])) {
+            Company::updateOrCreate(
+                ['symbol' => $symbol],
+                [
+                    'name' => $info['name'],
+                    'sector' => $info['sector'] ?? null,
+                    'industry' => $info['industry'] ?? null,
+                ]
+            );
+            $this->info("ℹ $symbol: " . $info['name'] . ($info['sector'] ? " ({$info['sector']})" : ''));
+        }
+
+        if (empty($data)) {
             $this->warn("No data found for $symbol");
             return;
         }

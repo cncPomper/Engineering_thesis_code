@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\Stock;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -10,10 +11,25 @@ class StockController extends Controller
 {
     public function symbols()
     {
+        $companies = Company::get()->keyBy('symbol');
+
         $symbols = Stock::selectRaw('symbol, MIN(date) as first_date, MAX(date) as last_date, COUNT(*) as records')
             ->groupBy('symbol')
             ->orderBy('symbol')
-            ->get();
+            ->get()
+            ->map(function ($row) use ($companies) {
+                $company = $companies->get($row->symbol);
+
+                return [
+                    'symbol' => $row->symbol,
+                    'first_date' => $row->first_date,
+                    'last_date' => $row->last_date,
+                    'records' => $row->records,
+                    'name' => $company->name ?? null,
+                    'sector' => $company->sector ?? null,
+                    'industry' => $company->industry ?? null,
+                ];
+            });
 
         return response()->json($symbols);
     }
