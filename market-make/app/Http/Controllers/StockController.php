@@ -8,13 +8,23 @@ use Carbon\Carbon;
 
 class StockController extends Controller
 {
+    public function symbols()
+    {
+        $symbols = Stock::selectRaw('symbol, MIN(date) as first_date, MAX(date) as last_date, COUNT(*) as records')
+            ->groupBy('symbol')
+            ->orderBy('symbol')
+            ->get();
+
+        return response()->json($symbols);
+    }
+
     public function range(Request $request)
     {
         $request->validate([
             'start' => 'required|date_format:d.m.Y',
             'end' => 'required|date_format:d.m.Y',
             'timeframe' => 'in:1D,1W,1M',
-            'symbol' => 'in:CDR,PKN,MBK,PLY,KGH,TPE',
+            'symbol' => 'string|exists:stocks,symbol',
         ]);
 
         $start = Carbon::createFromFormat('d.m.Y', $request->start)->startOfDay();
@@ -28,29 +38,22 @@ class StockController extends Controller
             ->get();
 
         if ($data->isEmpty()) {
-            return response()->json(['message' => 'No data found', 'data' => []]);
-        }
-
-        if ($timeframe === '1D') {
             return response()->json([
-                'timeframe' => '1D',
+                'message' => 'No data found',
+                'timeframe' => $timeframe,
                 'symbol' => $symbol,
                 'start' => $start->format('d.m.Y'),
                 'end' => $end->format('d.m.Y'),
-                'data' => $this->formatDailyData($data),
-                'grid' => $this->createGridData($data),
+                'data' => [],
             ]);
         }
-
-        $aggregated = $this->aggregateData($data, $timeframe);
 
         return response()->json([
             'timeframe' => $timeframe,
             'symbol' => $symbol,
             'start' => $start->format('d.m.Y'),
             'end' => $end->format('d.m.Y'),
-            'data' => $aggregated,
-            'grid' => $this->createGridData($data),
+            'data' => $this->aggregateData($data, $timeframe),
         ]);
     }
 
@@ -170,35 +173,4 @@ class StockController extends Controller
         }, array_values($grouped));
     }
 
-    private function createGridData($data)
-    {
-        $gridSize = 10;
-        $chunks = $data->chunk($gridSize);
-
-        return $chunks->map(function ($chunk) {
-            $first = $chunk->first();
-            $last = $chunk->last();
-
-            return [
-                'start_date' => $first->date->format('d.m.Y'),
-                'end_date' => $last->date->format('d.m.Y'),
-                'open' => $first->open,
-                'high' => $chunk->max('high'),
-                'low' => $chunk->min('low'),
-                'close' => $last->close,
-                'volume' => $chunk->sum('volume'),
-                'count' => $chunk->count(),
-                'data' => $chunk->map(function ($stock) {
-                    return [
-                        'date' => $stock->date->format('d.m.Y'),
-                        'open' => $stock->open,
-                        'high' => $stock->high,
-                        'low' => $stock->low,
-                        'close' => $stock->close,
-                        'volume' => $stock->volume,
-                    ];
-                })->toArray(),
-            ];
-        })->values()->toArray();
-    }
 }
