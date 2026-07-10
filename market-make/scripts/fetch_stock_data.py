@@ -2,19 +2,22 @@
 import sys
 import json
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def fetch_stock_data(symbol, start_date, end_date):
     """
     Fetch stock data from yfinance for a given symbol and date range.
+    Both dates are inclusive (yfinance treats `end` as exclusive, so shift it by one day).
     For GPW stocks, append .WA suffix (Warsaw exchange)
     """
     try:
         # Add .WA suffix for Polish stocks (GPW exchange)
         symbol = f"{symbol}.WA"
 
+        end_exclusive = (datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+
         ticker = yf.Ticker(symbol)
-        df = ticker.history(start=start_date, end=end_date)
+        df = ticker.history(start=start_date, end=end_exclusive)
 
         if df.empty:
             return []

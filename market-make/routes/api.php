@@ -19,3 +19,5 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::get('/stocks/range', [\App\Http\Controllers\StockController::class, 'range']);
+Route::get('/stocks/symbols', [\App\Http\Controllers\StockController::class, 'symbols']);
+Route::get('/screener', [\App\Http\Controllers\ScreenerController::class, 'index']);

@@ -20,3 +20,7 @@ Route::get('/', function () {
 Route::get('/stocks', function () {
     return view('stocks.index');
 });
+
+Route::get('/screener', function () {
+    return view('screener');
+});

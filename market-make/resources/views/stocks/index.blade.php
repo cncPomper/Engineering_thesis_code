@@ -40,6 +40,18 @@
             margin-bottom: 10px;
         }
 
+        .header nav a {
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            margin: 0 10px;
+            font-weight: 600;
+        }
+
+        .header nav a:hover {
+            color: white;
+            text-decoration: underline;
+        }
+
         .controls {
             background: #f8f9fa;
             padding: 20px 30px;
@@ -200,6 +212,10 @@
         <div class="header">
             <h1>📈 Stock Market Visualization</h1>
             <p>Interactive candlestick chart with volume — powered by data from GPW</p>
+            <nav>
+                <a href="/stocks">📈 Chart</a>
+                <a href="/screener">🔎 Screener</a>
+            </nav>
         </div>
 
         <div class="controls">
