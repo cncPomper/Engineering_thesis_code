@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Market Visualization</title>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         * {
             margin: 0;
@@ -123,77 +124,36 @@
 
         .chart-container {
             position: relative;
-            height: 400px;
+            height: 500px;
             margin-bottom: 30px;
-            background: #f8f9fa;
+            background: #131722;
             border-radius: 8px;
-            padding: 15px;
+            overflow: hidden;
         }
 
-        .grid-section {
-            margin-top: 40px;
+        .chart-legend {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 10;
+            font-size: 13px;
+            color: #d1d4dc;
+            background: rgba(19, 23, 34, 0.6);
+            padding: 6px 10px;
+            border-radius: 4px;
+            pointer-events: none;
+            line-height: 1.5;
         }
 
-        .grid-title {
-            font-size: 18px;
+        .chart-legend .symbol-name {
+            font-size: 15px;
             font-weight: 700;
-            margin-bottom: 20px;
-            color: #333;
         }
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .grid-cell {
-            background: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 12px;
-            cursor: pointer;
-            transition: all 0.3s;
-            position: relative;
-        }
-
-        .grid-cell:hover {
-            border-color: #667eea;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-            transform: translateY(-2px);
-        }
-
-        .grid-cell.active {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-
-        .grid-cell-chart {
-            position: relative;
-            height: 60px;
-            margin-bottom: 8px;
-        }
-
-        .grid-cell-info {
-            font-size: 12px;
-            line-height: 1.4;
-        }
-
-        .grid-cell-info .date-range {
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .grid-cell-info .ohlc {
-            font-size: 11px;
-            color: #666;
-        }
-
-        .grid-cell.active .grid-cell-info .ohlc {
-            color: rgba(255, 255, 255, 0.8);
-        }
+        .chart-legend .up { color: #26a69a; }
+        .chart-legend .down { color: #ef5350; }
+        .chart-legend .dc-upper { color: #2962ff; }
+        .chart-legend .dc-lower { color: #ef5350; }
 
         .loading {
             text-align: center;
@@ -229,11 +189,6 @@
                 margin-left: 0;
             }
 
-            .grid {
-                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-                gap: 10px;
-            }
-
             .header h1 {
                 font-size: 24px;
             }
@@ -244,7 +199,7 @@
     <div class="container">
         <div class="header">
             <h1>📈 Stock Market Visualization</h1>
-            <p>Interactive grid visualization with price range filtering</p>
+            <p>Interactive candlestick chart with volume — powered by data from GPW</p>
         </div>
 
         <div class="controls">
@@ -260,14 +215,7 @@
 
             <div class="control-group">
                 <label for="symbol">Stock (GPW):</label>
-                <select id="symbol">
-                    <option value="CDR">CDR - CD Projekt Red (Gaming)</option>
-                    <option value="PKN">PKN - PKN Orlen (Energy)</option>
-                    <option value="MBK">MBK - mBank (Banking)</option>
-                    <option value="PLY">PLY - Play Communications (Telecom)</option>
-                    <option value="KGH">KGH - KGHM Polska Miedź (Mining)</option>
-                    <option value="TPE">TPE - Tauron Polska Energia (Energy)</option>
-                </select>
+                <select id="symbol"></select>
             </div>
 
             <div class="timeframe-buttons">
@@ -288,16 +236,6 @@
                         <span id="selectedRange" style="color: #999; font-size: 14px;"></span>
                     </div>
                     <div id="priceChart" class="chart-container"></div>
-
-                    <div class="info-box" id="statsBox" style="display: none;">
-                        <strong>Selected Period Stats:</strong>
-                        <div id="stats" style="margin-top: 10px;"></div>
-                    </div>
-                </div>
-
-                <div class="grid-section">
-                    <div class="grid-title">Grid Thumbnails - Click to View Details</div>
-                    <div class="grid" id="gridContainer"></div>
                 </div>
             </div>
         </div>
@@ -306,9 +244,11 @@
     <script>
         let currentData = null;
         let currentTimeframe = '1D';
-        let selectedGridCell = null;
         let chart = null;
-        let candlestickSeries = null;
+        let candleSeries = null;
+        let volumeSeries = null;
+        let visibleFrom = null;
+        let visibleTo = null;
 
         const startDateInput = document.getElementById('startDate');
         const endDateInput = document.getElementById('endDate');
@@ -337,14 +277,44 @@
             return `${day}.${month}.${year}`;
         }
 
+        async function loadSymbols() {
+            const response = await fetch('/api/stocks/symbols');
+
+            if (!response.ok) {
+                throw new Error('Failed to load stock symbols');
+            }
+
+            const symbols = await response.json();
+
+            if (!symbols.length) {
+                throw new Error('No stocks in the database. Run "php artisan stocks:fetch" first.');
+            }
+
+            symbolSelect.innerHTML = '';
+            symbols.forEach(s => {
+                const option = document.createElement('option');
+                option.value = s.symbol;
+                option.textContent = `${s.symbol} - ${getCompanyName(s.symbol)}`;
+                symbolSelect.appendChild(option);
+            });
+        }
+
         async function fetchData() {
             loadingDiv.style.display = 'block';
             mainChartDiv.style.display = 'none';
             errorDiv.style.display = 'none';
 
-            const start = formatDateForAPI(startDateInput.value);
+            visibleFrom = startDateInput.value;
+            visibleTo = endDateInput.value;
+
+            const start = formatDateForAPI(indicatorWarmupStart(startDateInput.value, currentTimeframe));
             const end = formatDateForAPI(endDateInput.value);
             const symbol = symbolSelect.value;
+
+            if (!symbol) {
+                loadingDiv.style.display = 'none';
+                return;
+            }
 
             try {
                 const response = await fetch(
@@ -357,10 +327,16 @@
 
                 currentData = await response.json();
                 loadingDiv.style.display = 'none';
+
+                if (!currentData.data || currentData.data.length === 0) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = `No data for ${symbol} in the selected period (${currentData.start} to ${currentData.end}).`;
+                    return;
+                }
+
                 mainChartDiv.style.display = 'block';
 
                 renderChart(currentData);
-                renderGrid(currentData);
             } catch (error) {
                 loadingDiv.style.display = 'none';
                 errorDiv.style.display = 'block';
@@ -368,340 +344,188 @@
             }
         }
 
+        // Convert "dd.mm.yyyy" (API format) to "yyyy-mm-dd" (Lightweight Charts format)
+        function toChartTime(dmy) {
+            const [day, month, year] = dmy.split('.');
+            return `${year}-${month}-${day}`;
+        }
+
+        function formatVolume(v) {
+            if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+            if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+            return String(v);
+        }
+
+        // Donchian Channel: highest high / lowest low over the last `period` bars
+        // https://pl.tradingview.com/support/solutions/43000502253/
+        const DC_UPPER_PERIOD = 20;
+        const DC_LOWER_PERIOD = 10;
+
+        // Calendar days of extra history to fetch before the visible range, so the
+        // DC bands have a full lookback window from the first visible bar
+        // (TradingView computes indicators over history outside the viewport too)
+        const WARMUP_DAYS = { '1D': 60, '1W': 250, '1M': 800 };
+
+        function indicatorWarmupStart(isoDate, timeframe) {
+            const d = new Date(isoDate);
+            d.setDate(d.getDate() - (WARMUP_DAYS[timeframe] || 60));
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function donchianUpper(bars, period) {
+            const out = [];
+            for (let i = period - 1; i < bars.length; i++) {
+                let highest = -Infinity;
+                for (let j = i - period + 1; j <= i; j++) {
+                    highest = Math.max(highest, bars[j].high);
+                }
+                out.push({ time: bars[i].time, value: highest });
+            }
+            return out;
+        }
+
+        function donchianLower(bars, period) {
+            const out = [];
+            for (let i = period - 1; i < bars.length; i++) {
+                let lowest = Infinity;
+                for (let j = i - period + 1; j <= i; j++) {
+                    lowest = Math.min(lowest, bars[j].low);
+                }
+                out.push({ time: bars[i].time, value: lowest });
+            }
+            return out;
+        }
+
         function renderChart(data) {
             const container = document.getElementById('priceChart');
-            const chartData = data.data;
 
+            if (chart) {
+                chart.remove();
+                chart = null;
+            }
             container.innerHTML = '';
 
-            // Create SVG for candlestick chart
-            const margin = { top: 20, right: 30, bottom: 30, left: 60 };
-            const width = container.clientWidth - margin.left - margin.right;
-            const height = 400 - margin.top - margin.bottom;
+            const bars = data.data.map(d => ({
+                time: toChartTime(d.date || d.start_date),
+                open: d.open,
+                high: d.high,
+                low: d.low,
+                close: d.close,
+                volume: d.volume,
+            }));
 
-            // Calculate price range
-            const prices = chartData.flatMap(d => [d.open, d.high, d.low, d.close]);
-            const minPrice = Math.min(...prices);
-            const maxPrice = Math.max(...prices);
-            const priceRange = maxPrice - minPrice || 1;
-
-            // Create SVG
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('width', container.clientWidth);
-            svg.setAttribute('height', 400);
-            svg.setAttribute('style', 'background-color: #f8f9fa; display: block; width: 100%;');
-
-            // Draw Y-axis (prices)
-            const yAxisGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            for (let i = 0; i <= 5; i++) {
-                const price = minPrice + (priceRange / 5) * i;
-                const y = height - (price - minPrice) / priceRange * height + margin.top;
-
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', margin.left);
-                line.setAttribute('y1', y);
-                line.setAttribute('x2', container.clientWidth);
-                line.setAttribute('y2', y);
-                line.setAttribute('stroke', '#e0e0e0');
-                line.setAttribute('stroke-width', '1');
-                svg.appendChild(line);
-
-                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', margin.left - 10);
-                text.setAttribute('y', y + 5);
-                text.setAttribute('text-anchor', 'end');
-                text.setAttribute('font-size', '12');
-                text.setAttribute('fill', '#666');
-                text.textContent = price.toFixed(2);
-                svg.appendChild(text);
-            }
-
-            // Calculate candlestick width
-            const candleWidth = Math.max(5, width / chartData.length * 0.8);
-            const spacing = width / chartData.length;
-
-            // Draw candlesticks
-            chartData.forEach((d, idx) => {
-                const x = margin.left + idx * spacing + spacing / 2;
-
-                const highY = height - (d.high - minPrice) / priceRange * height + margin.top;
-                const lowY = height - (d.low - minPrice) / priceRange * height + margin.top;
-                const openY = height - (d.open - minPrice) / priceRange * height + margin.top;
-                const closeY = height - (d.close - minPrice) / priceRange * height + margin.top;
-
-                const isUp = d.close >= d.open;
-                const bodyTop = Math.min(openY, closeY);
-                const bodyHeight = Math.abs(closeY - openY) || 1;
-
-                // Wick (line from low to high)
-                const wick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                wick.setAttribute('x1', x);
-                wick.setAttribute('y1', lowY);
-                wick.setAttribute('x2', x);
-                wick.setAttribute('y2', highY);
-                wick.setAttribute('stroke', isUp ? '#26a69a' : '#ef5350');
-                wick.setAttribute('stroke-width', '1');
-                svg.appendChild(wick);
-
-                // Body (rectangle from open to close)
-                const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                body.setAttribute('x', x - candleWidth / 2);
-                body.setAttribute('y', bodyTop);
-                body.setAttribute('width', candleWidth);
-                body.setAttribute('height', bodyHeight);
-                body.setAttribute('fill', isUp ? '#26a69a' : '#ef5350');
-                body.setAttribute('stroke', isUp ? '#1a5d4d' : '#b83a32');
-                body.setAttribute('stroke-width', '1');
-                body.setAttribute('style', 'cursor: pointer;');
-                body.title = `${d.date || d.period}: O:${d.open.toFixed(2)} H:${d.high.toFixed(2)} L:${d.low.toFixed(2)} C:${d.close.toFixed(2)}`;
-                svg.appendChild(body);
+            chart = LightweightCharts.createChart(container, {
+                autoSize: true,
+                layout: {
+                    background: { type: 'solid', color: '#131722' },
+                    textColor: '#d1d4dc',
+                },
+                grid: {
+                    vertLines: { color: '#1e222d' },
+                    horzLines: { color: '#1e222d' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: { borderColor: '#2a2e39' },
+                timeScale: { borderColor: '#2a2e39' },
             });
 
-            // Draw X-axis
-            const xAxisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            xAxisLine.setAttribute('x1', margin.left);
-            xAxisLine.setAttribute('y1', height + margin.top);
-            xAxisLine.setAttribute('x2', container.clientWidth);
-            xAxisLine.setAttribute('y2', height + margin.top);
-            xAxisLine.setAttribute('stroke', '#999');
-            xAxisLine.setAttribute('stroke-width', '2');
-            svg.appendChild(xAxisLine);
-
-            // Draw Y-axis
-            const yAxisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            yAxisLine.setAttribute('x1', margin.left);
-            yAxisLine.setAttribute('y1', margin.top);
-            yAxisLine.setAttribute('x2', margin.left);
-            yAxisLine.setAttribute('y2', height + margin.top);
-            yAxisLine.setAttribute('stroke', '#999');
-            yAxisLine.setAttribute('stroke-width', '2');
-            svg.appendChild(yAxisLine);
-
-            // Add every 5th date label on X-axis
-            chartData.forEach((d, idx) => {
-                if (idx % Math.ceil(chartData.length / 6) === 0) {
-                    const x = margin.left + idx * spacing + spacing / 2;
-                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    text.setAttribute('x', x);
-                    text.setAttribute('y', height + margin.top + 20);
-                    text.setAttribute('text-anchor', 'middle');
-                    text.setAttribute('font-size', '11');
-                    text.setAttribute('fill', '#666');
-                    text.textContent = d.date ? d.date.substring(0, 5) : d.period;
-                    svg.appendChild(text);
-                }
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                borderDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
             });
+            candleSeries.setData(bars);
 
-            container.appendChild(svg);
+            // Volume histogram in its own pane at the bottom (like TradingView)
+            volumeSeries = chart.addHistogramSeries({
+                priceFormat: { type: 'volume' },
+                priceScaleId: 'volume',
+            });
+            chart.priceScale('volume').applyOptions({
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+            volumeSeries.setData(bars.map(b => ({
+                time: b.time,
+                value: b.volume,
+                color: b.close >= b.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
+            })));
+
+            // Donchian Channel: upper band (20) and lower band (10), step lines like TradingView
+            const dcUpperData = donchianUpper(bars, DC_UPPER_PERIOD);
+            const dcLowerData = donchianLower(bars, DC_LOWER_PERIOD);
+
+            const dcUpperSeries = chart.addLineSeries({
+                color: '#2962ff',
+                lineWidth: 1,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+            });
+            dcUpperSeries.setData(dcUpperData);
+
+            const dcLowerSeries = chart.addLineSeries({
+                color: '#ef5350',
+                lineWidth: 1,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+            });
+            dcLowerSeries.setData(dcLowerData);
+
+            const dcUpperByTime = new Map(dcUpperData.map(p => [p.time, p.value]));
+            const dcLowerByTime = new Map(dcLowerData.map(p => [p.time, p.value]));
+
+            // Show only the user-selected window; the warm-up history stays scrollable to the left
+            chart.timeScale().setVisibleRange({ from: visibleFrom, to: visibleTo });
+
+            // OHLC legend that follows the crosshair (like the TradingView header)
+            const legend = document.createElement('div');
+            legend.className = 'chart-legend';
+            container.appendChild(legend);
+
+            const barsByTime = new Map(bars.map(b => [b.time, b]));
+
+            const updateLegend = (bar) => {
+                if (!bar) return;
+                const change = bar.close - bar.open;
+                const changePct = bar.open ? (change / bar.open) * 100 : 0;
+                const cls = change >= 0 ? 'up' : 'down';
+                const sign = change >= 0 ? '+' : '';
+                const dcUpper = dcUpperByTime.get(bar.time);
+                const dcLower = dcLowerByTime.get(bar.time);
+                legend.innerHTML = `
+                    <span class="symbol-name">${getCompanyName(data.symbol)} (${data.symbol})</span>
+                    · ${getTimeframeLabel(currentTimeframe)}<br>
+                    O <span class="${cls}">${bar.open.toFixed(2)}</span>
+                    H <span class="${cls}">${bar.high.toFixed(2)}</span>
+                    L <span class="${cls}">${bar.low.toFixed(2)}</span>
+                    C <span class="${cls}">${bar.close.toFixed(2)}</span>
+                    <span class="${cls}">${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)</span>
+                    · Vol <span class="${cls}">${formatVolume(bar.volume)}</span><br>
+                    DC ${DC_UPPER_PERIOD} <span class="dc-upper">${dcUpper !== undefined ? dcUpper.toFixed(2) : '—'}</span>
+                    DC ${DC_LOWER_PERIOD} <span class="dc-lower">${dcLower !== undefined ? dcLower.toFixed(2) : '—'}</span>
+                `;
+            };
+
+            updateLegend(bars[bars.length - 1]);
+
+            chart.subscribeCrosshairMove(param => {
+                const bar = param.time ? barsByTime.get(param.time) : null;
+                updateLegend(bar || bars[bars.length - 1]);
+            });
 
             document.getElementById('chartTitle').textContent =
                 `${getCompanyName(data.symbol)} (${data.symbol}) - ${getTimeframeLabel(currentTimeframe)}`;
             document.getElementById('selectedRange').textContent =
-                ` (${data.start} to ${data.end})`;
-        }
-
-        function renderGrid(data) {
-            const gridContainer = document.getElementById('gridContainer');
-            gridContainer.innerHTML = '';
-
-            data.grid.forEach((cell, idx) => {
-                const div = document.createElement('div');
-                div.className = 'grid-cell';
-                div.onclick = () => selectGridCell(cell, idx, data.grid);
-
-                const miniChart = createMiniChart(cell);
-                const info = `
-                    <div class="date-range">${cell.start_date}<br>${cell.end_date}</div>
-                    <div class="ohlc">
-                        O: ${cell.open.toFixed(2)}<br>
-                        H: ${cell.high.toFixed(2)}<br>
-                        L: ${cell.low.toFixed(2)}<br>
-                        C: ${cell.close.toFixed(2)}
-                    </div>
-                `;
-
-                div.innerHTML = `
-                    <div class="grid-cell-chart">${miniChart}</div>
-                    <div class="grid-cell-info">${info}</div>
-                `;
-
-                gridContainer.appendChild(div);
-            });
-        }
-
-        function createMiniChart(cell) {
-            if (!cell.data || !Array.isArray(cell.data) || cell.data.length === 0) {
-                return '<svg></svg>';
-            }
-
-            const closeValues = cell.data
-                .map(d => typeof d === 'object' ? d.close : parseFloat(d))
-                .filter(v => !isNaN(v));
-
-            if (closeValues.length === 0) {
-                return '<svg></svg>';
-            }
-
-            const min = Math.min(...closeValues);
-            const max = Math.max(...closeValues);
-            const range = max - min || 1;
-            const width = 140;
-            const height = 60;
-            const padding = 5;
-
-            const points = closeValues.map((value, i) => {
-                const x = (i / (closeValues.length - 1 || 1)) * (width - padding * 2) + padding;
-                const y = height - padding - ((value - min) / range) * (height - padding * 2);
-                return `${x},${y}`;
-            }).join(' ');
-
-            return `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-                <polyline points="${points}" fill="none" stroke="#667eea" stroke-width="2" vector-effect="non-scaling-stroke"/>
-            </svg>`;
-        }
-
-        function selectGridCell(cell, idx, grid) {
-            document.querySelectorAll('.grid-cell').forEach((el, i) => {
-                el.classList.toggle('active', i === idx);
-            });
-
-            const stats = `
-                <strong>Period: ${cell.start_date} to ${cell.end_date}</strong><br>
-                Open: ${cell.open.toFixed(4)} | High: ${cell.high.toFixed(4)} | Low: ${cell.low.toFixed(4)} | Close: ${cell.close.toFixed(4)}<br>
-                Volume: ${(cell.volume / 1000).toFixed(0)}K | Days: ${cell.count}
-            `;
-            document.getElementById('stats').innerHTML = stats;
-            document.getElementById('statsBox').style.display = 'block';
-
-            if (cell.data && cell.data.length > 0) {
-                renderDetailedChart(cell);
-            }
-        }
-
-        function renderDetailedChart(cell) {
-            if (!cell.data || cell.data.length === 0) return;
-
-            const container = document.getElementById('priceChart');
-            container.innerHTML = '';
-
-            // Create SVG for candlestick chart
-            const margin = { top: 20, right: 30, bottom: 30, left: 60 };
-            const width = container.clientWidth - margin.left - margin.right;
-            const height = 400 - margin.top - margin.bottom;
-
-            // Calculate price range
-            const prices = cell.data.map(d => [d.open, d.high, d.low, d.close]).flat();
-            const minPrice = Math.min(...prices);
-            const maxPrice = Math.max(...prices);
-            const priceRange = maxPrice - minPrice || 1;
-
-            // Create SVG
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('width', container.clientWidth);
-            svg.setAttribute('height', 400);
-            svg.setAttribute('style', 'background-color: #f8f9fa; display: block; width: 100%;');
-
-            // Draw Y-axis (prices)
-            for (let i = 0; i <= 5; i++) {
-                const price = minPrice + (priceRange / 5) * i;
-                const y = height - (price - minPrice) / priceRange * height + margin.top;
-
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', margin.left);
-                line.setAttribute('y1', y);
-                line.setAttribute('x2', container.clientWidth);
-                line.setAttribute('y2', y);
-                line.setAttribute('stroke', '#e0e0e0');
-                line.setAttribute('stroke-width', '1');
-                svg.appendChild(line);
-
-                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', margin.left - 10);
-                text.setAttribute('y', y + 5);
-                text.setAttribute('text-anchor', 'end');
-                text.setAttribute('font-size', '12');
-                text.setAttribute('fill', '#666');
-                text.textContent = price.toFixed(2);
-                svg.appendChild(text);
-            }
-
-            // Calculate candlestick width
-            const candleWidth = Math.max(8, width / cell.data.length * 0.8);
-            const spacing = width / cell.data.length;
-
-            // Draw candlesticks
-            cell.data.forEach((d, idx) => {
-                const x = margin.left + idx * spacing + spacing / 2;
-
-                const highY = height - (d.high - minPrice) / priceRange * height + margin.top;
-                const lowY = height - (d.low - minPrice) / priceRange * height + margin.top;
-                const openY = height - (d.open - minPrice) / priceRange * height + margin.top;
-                const closeY = height - (d.close - minPrice) / priceRange * height + margin.top;
-
-                const isUp = d.close >= d.open;
-                const bodyTop = Math.min(openY, closeY);
-                const bodyHeight = Math.abs(closeY - openY) || 1;
-
-                // Wick (line from low to high)
-                const wick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                wick.setAttribute('x1', x);
-                wick.setAttribute('y1', lowY);
-                wick.setAttribute('x2', x);
-                wick.setAttribute('y2', highY);
-                wick.setAttribute('stroke', isUp ? '#26a69a' : '#ef5350');
-                wick.setAttribute('stroke-width', '1');
-                svg.appendChild(wick);
-
-                // Body (rectangle from open to close)
-                const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                body.setAttribute('x', x - candleWidth / 2);
-                body.setAttribute('y', bodyTop);
-                body.setAttribute('width', candleWidth);
-                body.setAttribute('height', bodyHeight);
-                body.setAttribute('fill', isUp ? '#26a69a' : '#ef5350');
-                body.setAttribute('stroke', isUp ? '#1a5d4d' : '#b83a32');
-                body.setAttribute('stroke-width', '1');
-                body.setAttribute('style', 'cursor: pointer;');
-                body.title = `${d.date}: O:${d.open.toFixed(2)} H:${d.high.toFixed(2)} L:${d.low.toFixed(2)} C:${d.close.toFixed(2)}`;
-                svg.appendChild(body);
-            });
-
-            // Draw X-axis
-            const xAxisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            xAxisLine.setAttribute('x1', margin.left);
-            xAxisLine.setAttribute('y1', height + margin.top);
-            xAxisLine.setAttribute('x2', container.clientWidth);
-            xAxisLine.setAttribute('y2', height + margin.top);
-            xAxisLine.setAttribute('stroke', '#999');
-            xAxisLine.setAttribute('stroke-width', '2');
-            svg.appendChild(xAxisLine);
-
-            // Draw Y-axis
-            const yAxisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            yAxisLine.setAttribute('x1', margin.left);
-            yAxisLine.setAttribute('y1', margin.top);
-            yAxisLine.setAttribute('x2', margin.left);
-            yAxisLine.setAttribute('y2', height + margin.top);
-            yAxisLine.setAttribute('stroke', '#999');
-            yAxisLine.setAttribute('stroke-width', '2');
-            svg.appendChild(yAxisLine);
-
-            // Add date labels on X-axis
-            cell.data.forEach((d, idx) => {
-                if (idx % Math.ceil(cell.data.length / 5) === 0) {
-                    const x = margin.left + idx * spacing + spacing / 2;
-                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    text.setAttribute('x', x);
-                    text.setAttribute('y', height + margin.top + 20);
-                    text.setAttribute('text-anchor', 'middle');
-                    text.setAttribute('font-size', '11');
-                    text.setAttribute('fill', '#666');
-                    text.textContent = d.date.substring(0, 5);
-                    svg.appendChild(text);
-                }
-            });
-
-            container.appendChild(svg);
+                ` (${formatDateForAPI(visibleFrom)} to ${formatDateForAPI(visibleTo)})`;
         }
 
         function getTimeframeLabel(tf) {
@@ -711,12 +535,13 @@
 
         function getCompanyName(symbol) {
             const names = {
-                'CDR': 'CD Projekt Red',
-                'PKN': 'PKN Orlen',
-                'MBK': 'mBank',
-                'PLY': 'Play Communications',
-                'KGH': 'KGHM Polska Miedź',
-                'TPE': 'Tauron Polska Energia'
+                'MOC': 'Molecure (Biotech)',
+                'CDR': 'CD Projekt Red (Gaming)',
+                'PKN': 'PKN Orlen (Energy)',
+                'MBK': 'mBank (Banking)',
+                'PLY': 'Play Communications (Telecom)',
+                'KGH': 'KGHM Polska Miedź (Mining)',
+                'TPE': 'Tauron Polska Energia (Energy)'
             };
             return names[symbol] || symbol;
         }
@@ -740,8 +565,14 @@
         // Initialize dates on page load
         setDefaultDates();
 
-        // Initial load
-        fetchData();
+        // Initial load: populate the symbol list from the DB, then fetch data
+        loadSymbols()
+            .then(fetchData)
+            .catch(error => {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Error: ' + error.message;
+            });
     </script>
 </body>
 </html>
