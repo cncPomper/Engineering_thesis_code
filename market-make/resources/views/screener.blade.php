@@ -271,6 +271,7 @@
                         <th data-key="off_52w_high" title="Distance from the 52-week high">Δ 52W High</th>
                         <th data-key="volatility" title="Annualized volatility of daily returns">Volatility</th>
                         <th data-key="ema_trend" title="Price vs 50-week EMA">H</th>
+                        <th data-key="trade_position" title="Donchian(20/10) + ATR(14) strategy state (php artisan signals:compute)">Signal</th>
                     </tr>
                 </thead>
                 <tbody id="screenerBody"></tbody>
@@ -344,6 +345,25 @@
                 .join('\n');
         }
 
+        function signalLabel(r) {
+            if (!r.trade_position) return '—';
+            return r.trade_position + (r.trade_stop_hit ? ' ⚠' : '');
+        }
+
+        function signalClass(r) {
+            if (!r.trade_position || r.trade_position === 'FLAT') return 'muted';
+            if (r.trade_stop_hit) return 'orange';
+            return r.trade_position === 'LONG' ? 'green' : 'red';
+        }
+
+        function signalTooltip(r) {
+            if (!r.trade_position) return 'No signal computed yet (php artisan signals:compute)';
+            if (r.trade_position === 'FLAT') return 'No breakout in the available history';
+            return `${r.trade_position} since ${r.trade_entry_date} @ ${r.trade_entry}` +
+                `\nStop loss: ${r.trade_stop}` +
+                (r.trade_stop_hit ? '\n⚠ Stop breached — exit signal' : '');
+        }
+
         function currentFilters() {
             return {
                 minGrowth: minGrowthInput.value === '' ? null : parseFloat(minGrowthInput.value),
@@ -398,6 +418,7 @@
                     <td class="${pctClass(r.off_52w_high)}">${fmtPct(r.off_52w_high)}</td>
                     <td>${r.volatility === null ? '—' : r.volatility.toFixed(1) + '%'}</td>
                     <td class="${r.ema_trend === 'UP' ? 'green' : r.ema_trend === 'DOWN' ? 'red' : 'muted'}">${r.ema_trend || '—'}</td>
+                    <td class="${signalClass(r)}" title="${signalTooltip(r)}">${signalLabel(r)}</td>
                 </tr>
             `).join('');
 

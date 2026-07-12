@@ -15,7 +15,23 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        // Daily pipeline: refresh prices -> recompute strategy state -> alert
+        // on transitions. 21:30 UTC is after both the Warsaw close (15:00 UTC)
+        // and the US close (20:00/21:00 UTC), so one run covers all markets.
+        $schedule->command('stocks:fetch --symbols=db')
+            ->weekdays()->at('21:30')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/pipeline.log'));
+
+        $schedule->command('signals:compute')
+            ->weekdays()->at('21:50')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/pipeline.log'));
+
+        $schedule->command('alerts:discord')
+            ->weekdays()->at('21:55')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/pipeline.log'));
     }
 
     /**

@@ -10,12 +10,14 @@ use Carbon\Carbon;
 
 class FetchStockData extends Command
 {
-    protected $signature = 'stocks:fetch {--symbols=CDR.WA,PKN.WA,MBK.WA,PLY.WA,KGH.WA,TPE.WA} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
+    protected $signature = 'stocks:fetch {--symbols=CDR.WA,PKN.WA,MBK.WA,PLY.WA,KGH.WA,TPE.WA : Comma-separated tickers, or "db" for every symbol already in the database} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
     protected $description = 'Fetch stock data from yfinance for the given tickers (any exchange, e.g. NVDA, CDR.WA, BMW.DE)';
 
     public function handle()
     {
-        $symbols = explode(',', $this->option('symbols'));
+        $symbols = $this->option('symbols') === 'db'
+            ? Stock::select('symbol')->distinct()->orderBy('symbol')->pluck('symbol')->all()
+            : explode(',', $this->option('symbols'));
         $start = $this->option('start');
         $end = $this->option('end') ?? Carbon::now()->format('Y-m-d');
 

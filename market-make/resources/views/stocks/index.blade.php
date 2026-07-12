@@ -490,11 +490,15 @@
             return `${year}-${month}-${day}`;
         }
 
+        // Bands use the `period` bars strictly BEFORE each bar (shift by 1),
+        // matching the alert engine (App\Services\DonchianAtrStrategy): a bar
+        // is never judged against a channel that includes itself, so a candle
+        // closing beyond its band on the chart is exactly a strategy breakout
         function donchianUpper(bars, period) {
             const out = [];
-            for (let i = period - 1; i < bars.length; i++) {
+            for (let i = period; i < bars.length; i++) {
                 let highest = -Infinity;
-                for (let j = i - period + 1; j <= i; j++) {
+                for (let j = i - period; j < i; j++) {
                     highest = Math.max(highest, bars[j].high);
                 }
                 out.push({ time: bars[i].time, value: highest });
@@ -504,9 +508,9 @@
 
         function donchianLower(bars, period) {
             const out = [];
-            for (let i = period - 1; i < bars.length; i++) {
+            for (let i = period; i < bars.length; i++) {
                 let lowest = Infinity;
-                for (let j = i - period + 1; j <= i; j++) {
+                for (let j = i - period; j < i; j++) {
                     lowest = Math.min(lowest, bars[j].low);
                 }
                 out.push({ time: bars[i].time, value: lowest });

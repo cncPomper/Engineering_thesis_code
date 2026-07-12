@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Signal;
 use App\Models\Stock;
 
 class ScreenerController extends Controller
@@ -11,6 +12,7 @@ class ScreenerController extends Controller
     {
         $symbols = Stock::select('symbol')->distinct()->orderBy('symbol')->pluck('symbol');
         $companies = Company::get()->keyBy('symbol');
+        $signals = Signal::get()->keyBy('symbol');
 
         $results = [];
         foreach ($symbols as $symbol) {
@@ -29,6 +31,15 @@ class ScreenerController extends Controller
                 $metrics['reliability_score'] = $company->reliability_score ?? null;
                 $metrics['reliability_max'] = $company->reliability_max ?? null;
                 $metrics['reliability_checks'] = $company->reliability_checks ?? null;
+
+                // Donchian/ATR strategy state precomputed by "php artisan signals:compute"
+                $signal = $signals->get($symbol);
+                $metrics['trade_position'] = $signal->position ?? null;
+                $metrics['trade_entry'] = $signal->entry_price ?? null;
+                $metrics['trade_entry_date'] = $signal && $signal->entry_date ? $signal->entry_date->format('Y-m-d') : null;
+                $metrics['trade_stop'] = $signal->stop_loss ?? null;
+                $metrics['trade_stop_hit'] = $signal->stop_hit ?? false;
+
                 $results[] = $metrics;
             }
         }
