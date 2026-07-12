@@ -19,9 +19,13 @@ class Company extends Model
         'reliability_score',
         'reliability_max',
         'reliability_checks',
+        'data_from',
+        'data_to',
     ];
 
     protected $casts = [
+        'data_from' => 'date',
+        'data_to' => 'date',
         'revenue_growth' => 'float',
         'eps_growth' => 'float',
         'reliability_score' => 'integer',

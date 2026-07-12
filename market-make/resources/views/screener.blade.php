@@ -301,7 +301,7 @@
             const parts = [r.symbol];
             if (r.sector) parts.push(r.sector);
             if (r.industry && r.industry !== r.sector) parts.push(r.industry);
-            parts.push(r.last_date);
+            parts.push(r.first_date ? `${r.first_date} → ${r.last_date}` : r.last_date);
             return parts.join(' · ');
         }
 

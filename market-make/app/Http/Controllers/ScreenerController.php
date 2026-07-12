@@ -80,6 +80,7 @@ class ScreenerController extends Controller
         return [
             'symbol' => $symbol,
             'last_close' => round($lastClose, 2),
+            'first_date' => $first->date->format('Y-m-d'),
             'last_date' => $lastDate->format('Y-m-d'),
             'return_1m' => $this->returnOverDays($rows, 30),
             'return_3m' => $return3m,

@@ -141,6 +141,8 @@ class FetchStockData extends Command
             $exists ? $updated++ : $created++;
         }
 
+        $this->updateDataRange($symbol);
+
         $summary = "✓ $symbol: $created new";
         if ($updated > 0) {
             $summary .= ", $updated refreshed";
@@ -149,5 +151,22 @@ class FetchStockData extends Command
             $summary .= ", $skipped already in database (use --force to refresh)";
         }
         $this->info($summary);
+    }
+
+    private function updateDataRange($symbol)
+    {
+        $range = Stock::where('symbol', $symbol)
+            ->selectRaw('MIN(date) as data_from, MAX(date) as data_to')
+            ->first();
+
+        if ($range && $range->data_from) {
+            Company::updateOrCreate(
+                ['symbol' => $symbol],
+                [
+                    'data_from' => Carbon::parse($range->data_from),
+                    'data_to' => Carbon::parse($range->data_to),
+                ]
+            );
+        }
     }
 }
