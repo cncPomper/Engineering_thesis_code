@@ -96,6 +96,14 @@
             background: #764ba2;
         }
 
+        .indicator-toggles label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
         .timeframe-buttons {
             display: flex;
             gap: 10px;
@@ -268,6 +276,11 @@
                 <select id="symbol"></select>
             </div>
 
+            <div class="control-group indicator-toggles">
+                <label><input type="checkbox" id="toggleDC" checked> Donchian Channel</label>
+                <label><input type="checkbox" id="toggleVolume" checked> Volume</label>
+            </div>
+
             <div class="timeframe-buttons">
                 <button class="timeframe-btn active" data-timeframe="1D">Daily</button>
                 <button class="timeframe-btn" data-timeframe="1W">Weekly</button>
@@ -324,6 +337,9 @@
         let chart = null;
         let candleSeries = null;
         let volumeSeries = null;
+        let dcUpperSeries = null;
+        let dcLowerSeries = null;
+        let refreshLegend = null;
         let visibleFrom = null;
         let visibleTo = null;
 
@@ -334,11 +350,27 @@
         const errorDiv = document.getElementById('error');
         const loadingDiv = document.getElementById('loading');
         const mainChartDiv = document.getElementById('mainChart');
+        const dcToggle = document.getElementById('toggleDC');
+        const volumeToggle = document.getElementById('toggleVolume');
+
+        // Show/hide indicator series in place, no refetch or chart rebuild needed
+        function applyIndicatorVisibility() {
+            if (dcUpperSeries) dcUpperSeries.applyOptions({ visible: dcToggle.checked });
+            if (dcLowerSeries) dcLowerSeries.applyOptions({ visible: dcToggle.checked });
+            if (volumeSeries) volumeSeries.applyOptions({ visible: volumeToggle.checked });
+            if (refreshLegend) refreshLegend();
+        }
+
+        dcToggle.addEventListener('change', applyIndicatorVisibility);
+        volumeToggle.addEventListener('change', applyIndicatorVisibility);
 
         // Event listeners
         startDateInput.addEventListener('change', fetchData);
         endDateInput.addEventListener('change', fetchData);
-        symbolSelect.addEventListener('change', fetchData);
+        symbolSelect.addEventListener('change', () => {
+            setFullRangeForSymbol();
+            fetchData();
+        });
 
         timeframeButtons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -370,6 +402,10 @@
             symbolSelect.innerHTML = '';
             symbols.forEach(s => {
                 if (s.name) companyNames[s.symbol] = s.name;
+                symbolRanges[s.symbol] = {
+                    from: String(s.first_date).slice(0, 10),
+                    to: String(s.last_date).slice(0, 10),
+                };
                 const option = document.createElement('option');
                 option.value = s.symbol;
                 option.textContent = `${s.symbol} - ${getCompanyName(s.symbol)}` + (s.sector ? ` (${s.sector})` : '');
@@ -541,7 +577,7 @@
             const dcUpperData = donchianUpper(bars, DC_UPPER_PERIOD);
             const dcLowerData = donchianLower(bars, DC_LOWER_PERIOD);
 
-            const dcUpperSeries = chart.addLineSeries({
+            dcUpperSeries = chart.addLineSeries({
                 color: '#2962ff',
                 lineWidth: 1,
                 priceLineVisible: false,
@@ -550,7 +586,7 @@
             });
             dcUpperSeries.setData(dcUpperData);
 
-            const dcLowerSeries = chart.addLineSeries({
+            dcLowerSeries = chart.addLineSeries({
                 color: '#ef5350',
                 lineWidth: 1,
                 priceLineVisible: false,
@@ -572,14 +608,24 @@
 
             const barsByTime = new Map(bars.map(b => [b.time, b]));
 
+            let legendBar = null;
+
             const updateLegend = (bar) => {
                 if (!bar) return;
+                legendBar = bar;
                 const change = bar.close - bar.open;
                 const changePct = bar.open ? (change / bar.open) * 100 : 0;
                 const cls = change >= 0 ? 'up' : 'down';
                 const sign = change >= 0 ? '+' : '';
                 const dcUpper = dcUpperByTime.get(bar.time);
                 const dcLower = dcLowerByTime.get(bar.time);
+                const volPart = volumeToggle.checked
+                    ? `· Vol <span class="${cls}">${formatVolume(bar.volume)}</span>`
+                    : '';
+                const dcPart = dcToggle.checked
+                    ? `<br>DC ${DC_UPPER_PERIOD} <span class="dc-upper">${dcUpper !== undefined ? dcUpper.toFixed(2) : '—'}</span>
+                       DC ${DC_LOWER_PERIOD} <span class="dc-lower">${dcLower !== undefined ? dcLower.toFixed(2) : '—'}</span>`
+                    : '';
                 legend.innerHTML = `
                     <span class="symbol-name">${getCompanyName(data.symbol)} (${data.symbol})</span>
                     · ${getTimeframeLabel(currentTimeframe)}<br>
@@ -588,13 +634,13 @@
                     L <span class="${cls}">${bar.low.toFixed(2)}</span>
                     C <span class="${cls}">${bar.close.toFixed(2)}</span>
                     <span class="${cls}">${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)</span>
-                    · Vol <span class="${cls}">${formatVolume(bar.volume)}</span><br>
-                    DC ${DC_UPPER_PERIOD} <span class="dc-upper">${dcUpper !== undefined ? dcUpper.toFixed(2) : '—'}</span>
-                    DC ${DC_LOWER_PERIOD} <span class="dc-lower">${dcLower !== undefined ? dcLower.toFixed(2) : '—'}</span>
+                    ${volPart}${dcPart}
                 `;
             };
 
+            refreshLegend = () => updateLegend(legendBar);
             updateLegend(bars[bars.length - 1]);
+            applyIndicatorVisibility();
 
             chart.subscribeCrosshairMove(param => {
                 const bar = param.time ? barsByTime.get(param.time) : null;
@@ -614,6 +660,17 @@
 
         // Filled from /api/stocks/symbols (names come from yfinance via the companies table)
         const companyNames = {};
+
+        // Full DB history per symbol ({ from, to }), filled from /api/stocks/symbols
+        const symbolRanges = {};
+
+        // Default the date inputs to the whole history stored in the DB for the selected symbol
+        function setFullRangeForSymbol() {
+            const range = symbolRanges[symbolSelect.value];
+            if (!range) return;
+            startDateInput.value = range.from;
+            endDateInput.value = range.to;
+        }
 
         function getCompanyName(symbol) {
             return companyNames[symbol] || symbol;
@@ -703,12 +760,15 @@
             endDateInput.value = formatDate(today);
         }
 
-        // Initialize dates on page load
+        // Fallback in case the symbol list has no range info
         setDefaultDates();
 
-        // Initial load: populate the symbol list and GROWTH metrics, then fetch data
+        // Initial load: populate the symbol list and GROWTH metrics, then chart the whole DB history
         Promise.all([loadSymbols(), loadQuickAnalysis()])
-            .then(fetchData)
+            .then(() => {
+                setFullRangeForSymbol();
+                fetchData();
+            })
             .catch(error => {
                 loadingDiv.style.display = 'none';
                 errorDiv.style.display = 'block';
