@@ -20,7 +20,8 @@ the GROWTH Investing methodology.
 ## Requirements
 
 - PHP 8.0+ with Composer
-- SQLite (default) or MySQL — configured in `.env`
+- SQLite (default) or MySQL — configured in `.env`; a `docker-compose.yml` is
+  provided for MySQL (see [Database](#database-mysql-via-docker))
 - Python 3.8+ in a virtualenv at `.venv/` with `yfinance` (numpy comes with it)
 
 ## Setup
@@ -29,6 +30,7 @@ the GROWTH Investing methodology.
 composer install
 cp .env.example .env          # then configure DB_* if not using SQLite
 php artisan key:generate
+docker compose up -d          # MySQL only — see "Database" below
 php artisan migrate
 
 # Python side (used by the artisan fetch commands)
@@ -38,6 +40,22 @@ python -m venv .venv
 
 php artisan serve             # then open http://127.0.0.1:8000/stocks
 ```
+
+## Database (MySQL via Docker)
+
+The MySQL database runs in Docker, defined in `docker-compose.yml`. It reads
+`DB_PORT`, `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` from `.env`, binds to
+`127.0.0.1:13306` and persists data in the `market-make-db-data` volume.
+
+```bash
+docker compose up -d          # start (auto-restarts after reboot too)
+docker compose stop           # stop
+docker compose logs -f db     # tail MySQL logs
+docker compose down           # remove the container; data volume is kept
+```
+
+Do **not** use `docker compose down -v` — the `-v` flag deletes the data
+volume and with it all downloaded stock history.
 
 ## Fetching data
 
