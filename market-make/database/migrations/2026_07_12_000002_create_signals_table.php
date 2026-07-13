@@ -12,15 +12,15 @@ return new class extends Migration
             $table->id();
             $table->string('symbol')->unique(); // one row = current strategy state per symbol
             $table->date('date');               // latest bar the state was computed from
-            $table->float('close', 12, 4);
-            $table->float('dc_upper', 12, 4)->nullable();
-            $table->float('dc_lower', 12, 4)->nullable();
-            $table->float('atr', 12, 4)->nullable();
+            $table->double('close');
+            $table->double('dc_upper')->nullable();
+            $table->double('dc_lower')->nullable();
+            $table->double('atr')->nullable();
             $table->string('signal');           // latest bar: LONG / SHORT / NEUTRAL
             $table->string('position');         // carried state: LONG / SHORT / FLAT
             $table->date('entry_date')->nullable();
-            $table->float('entry_price', 12, 4)->nullable();
-            $table->float('stop_loss', 12, 4)->nullable();
+            $table->double('entry_price')->nullable();
+            $table->double('stop_loss')->nullable();
             $table->boolean('stop_hit')->default(false);
 
             // Alert bookkeeping (kept across recomputes so alerts stay idempotent)

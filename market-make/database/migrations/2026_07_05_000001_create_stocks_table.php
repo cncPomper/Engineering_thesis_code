@@ -12,10 +12,12 @@ return new class extends Migration
             $table->id();
             $table->string('symbol'); // MOC, AMB, etc.
             $table->date('date');
-            $table->float('open', 10, 2);
-            $table->float('high', 10, 2);
-            $table->float('low', 10, 2);
-            $table->float('close', 10, 2);
+            // double, not float(10,2): MySQL enforces the precision and would
+            // round yfinance's adjusted prices; SQLite always ignored it
+            $table->double('open');
+            $table->double('high');
+            $table->double('low');
+            $table->double('close');
             $table->bigInteger('volume');
             $table->timestamps();
 

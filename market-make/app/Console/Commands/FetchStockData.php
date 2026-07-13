@@ -10,14 +10,12 @@ use Carbon\Carbon;
 
 class FetchStockData extends Command
 {
-    protected $signature = 'stocks:fetch {--symbols=CDR.WA,PKN.WA,MBK.WA,PLY.WA,KGH.WA,TPE.WA : Comma-separated tickers, or "db" for every symbol already in the database} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
+    protected $signature = 'stocks:fetch {--symbols=CDR.WA,PKN.WA,MBK.WA,PLY.WA,KGH.WA,TPE.WA : Comma-separated tickers, "db" for every symbol already in the database, or "db:.WA" to filter by suffix} {--start=} {--end=} {--force : Overwrite records that already exist in the database}';
     protected $description = 'Fetch stock data from yfinance for the given tickers (any exchange, e.g. NVDA, CDR.WA, BMW.DE)';
 
     public function handle()
     {
-        $symbols = $this->option('symbols') === 'db'
-            ? Stock::select('symbol')->distinct()->orderBy('symbol')->pluck('symbol')->all()
-            : explode(',', $this->option('symbols'));
+        $symbols = $this->resolveSymbols($this->option('symbols'));
         $start = $this->option('start');
         $end = $this->option('end') ?? Carbon::now()->format('Y-m-d');
 
@@ -29,7 +27,7 @@ class FetchStockData extends Command
 
             if ($symbolStart > $end) {
                 if (Company::where('symbol', $symbol)->exists()) {
-                    $this->info("✓ $symbol is already up to date (latest record: " . Carbon::parse($symbolStart)->subDay()->format('Y-m-d') . ")");
+                    $this->info("✓ $symbol is already up to date (latest record: " . Carbon::parse($symbolStart)->format('Y-m-d') . ")");
                     continue;
                 }
 
@@ -45,12 +43,35 @@ class FetchStockData extends Command
         $this->info('Stock data fetch completed!');
     }
 
+    /**
+     * "db" = every symbol in the stocks table, "db:.WA" = only symbols with
+     * that suffix (one exchange), otherwise a comma-separated ticker list.
+     */
+    private function resolveSymbols($option)
+    {
+        if ($option !== 'db' && strpos($option, 'db:') !== 0) {
+            return explode(',', $option);
+        }
+
+        $query = Stock::select('symbol')->distinct()->orderBy('symbol');
+
+        $suffix = substr($option, 3);
+        if ($suffix !== '' && $suffix !== false) {
+            $query->where('symbol', 'like', '%' . $suffix);
+        }
+
+        return $query->pluck('symbol')->all();
+    }
+
     private function resolveStartDate($symbol)
     {
         $latestDate = Stock::where('symbol', $symbol)->max('date');
 
         if ($latestDate) {
-            return Carbon::parse($latestDate)->addDay()->format('Y-m-d');
+            // Start AT the latest stored day, not after it: if that bar was
+            // written while the market was still open it holds a partial
+            // close, and refetching it replaces it with the final one
+            return Carbon::parse($latestDate)->format('Y-m-d');
         }
 
         return Carbon::now()->subMonths(3)->format('Y-m-d');
@@ -118,10 +139,14 @@ class FetchStockData extends Command
         $updated = 0;
         $skipped = 0;
 
+        // The newest stored bar may hold a partial close if it was fetched
+        // while the market was open, so it is always refreshed
+        $latestExisting = $existingDates->keys()->max();
+
         foreach ($data as $row) {
             $exists = isset($existingDates[$row['date']]);
 
-            if ($exists && !$force) {
+            if ($exists && !$force && $row['date'] !== $latestExisting) {
                 $skipped++;
                 continue;
             }
