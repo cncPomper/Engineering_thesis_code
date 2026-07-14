@@ -111,6 +111,35 @@ yfinance and stores:
 Re-run after earnings seasons to keep the scores current. yfinance usually
 exposes only 3–4 annual periods, so the checklist accepts a 3–5 year window.
 
+## Scheduled pipeline (Windows)
+
+The alert pipeline — `stocks:fetch` → `signals:compute` → `alerts:discord` —
+is scheduled in [`app/Console/Kernel.php`](app/Console/Kernel.php) (weekdays
+only, times in **UTC**):
+
+| Run | Times (UTC) | Scope |
+|---|---|---|
+| WSE early run | 16:15 / 16:30 / 16:35 | `.WA` symbols only, right after the Warsaw close |
+| Full run | 21:30 / 21:50 / 21:55 | every symbol, after the US close |
+
+All job output is appended to `storage/logs/pipeline.log`.
+
+A Windows Task Scheduler task (**"market-make scheduler"**) fires every minute
+and runs `php artisan schedule:run` through
+[`scripts/run-scheduler.vbs`](scripts/run-scheduler.vbs) (no console window);
+Laravel decides which jobs are actually due. To create the task — or repair it
+after any manual change — run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\register-scheduler.ps1
+```
+
+The script is idempotent and sets the important power flags: the task **wakes
+the PC from sleep** and **runs on battery**. This matters because Laravel's
+scheduler has no catch-up — a job whose minute passes while the PC is off or
+asleep is skipped for the day. Prices self-heal (`stocks:fetch` is
+incremental), so after a missed day the alerts simply arrive one run late.
+
 ## Pages
 
 ### `/stocks` — chart
@@ -158,6 +187,9 @@ app/Http/Controllers/ScreenerController.php /api/screener (price metrics)
 scripts/fetch_stock_data.py                 yfinance OHLCV + company metadata
 scripts/fetch_fundamentals.py               yfinance financial statements
 scripts/growth_reliability.py               GROWTH "R" checklist (standalone, has a demo: run it directly)
+scripts/register-scheduler.ps1              creates/repairs the Windows scheduler task
+scripts/run-scheduler.vbs                   runs `artisan schedule:run` without a console window
+app/Console/Kernel.php                      pipeline schedule (times, symbols, log file)
 resources/views/stocks/index.blade.php      chart page
 resources/views/screener.blade.php          screener page
 ```
