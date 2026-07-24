@@ -1,20 +1,17 @@
 services:
   db:
-    image: mysql:8.4
+    image: postgres:16
     container_name: market-make-db
     restart: unless-stopped
     ports:
-      - "${DB_HOST:-127.0.0.1}:${DB_PORT:-13306}:3306"
+      - "${DB_HOST:-127.0.0.1}:${DB_PORT:-15432}:5432"
     environment:
-      MYSQL_DATABASE: "${DB_DATABASE}"
-      MYSQL_USER: "${DB_USERNAME}"
-      MYSQL_PASSWORD: "${DB_PASSWORD}"
-      MYSQL_ROOT_PASSWORD: "${DB_PASSWORD}"
+      POSTGRES_DB: "${DB_DATABASE}"
+      POSTGRES_USER: "${DB_USERNAME}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
     volumes:
-      - db-data:/var/lib/mysql
+      - db-data:/var/lib/postgresql/data
 
 volumes:
   db-data:
-    # Matches the volume of the original `docker run` container,
-    # so existing data is reused.
     name: market-make-db-data

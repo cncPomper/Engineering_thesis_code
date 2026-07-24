@@ -12,8 +12,6 @@ return new class extends Migration
             $table->id();
             $table->string('symbol'); // MOC, AMB, etc.
             $table->date('date');
-            // double, not float(10,2): MySQL enforces the precision and would
-            // round yfinance's adjusted prices; SQLite always ignored it
             $table->double('open');
             $table->double('high');
             $table->double('low');
