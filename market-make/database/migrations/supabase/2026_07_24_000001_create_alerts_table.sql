@@ -24,7 +24,7 @@ BEGIN
         url     := webhook_url,
         body    := json_build_object(
                      'content', 'New alert: ' || NEW.symbol || ' @ ' || NEW.close
-                   )::text,
+                   )::jsonb,
         headers := '{"Content-Type": "application/json"}'::jsonb
     );
     RETURN NEW;
