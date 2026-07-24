@@ -1,0 +1,50 @@
+name: Full pipeline (all markets close)
+
+on:
+  schedule:
+    - cron: '30 21 * * 1-5'  # 21:30 UTC weekdays — after US close
+  workflow_dispatch:           # allow manual trigger from GitHub UI
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_pgsql
+
+      - name: Install dependencies
+        run: composer install --no-dev --optimize-autoloader
+        working-directory: market-make
+
+      - name: Fetch all prices
+        run: php artisan stocks:fetch --symbols=db
+        working-directory: market-make
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_ENV: production
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: 5432
+          DB_DATABASE: postgres
+          DB_USERNAME: postgres
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+      - name: Compute signals
+        run: php artisan signals:compute
+        working-directory: market-make
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_ENV: production
+          DB_CONNECTION: pgsql
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: 5432
+          DB_DATABASE: postgres
+          DB_USERNAME: postgres
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
