@@ -113,6 +113,70 @@
             margin-left: auto;
         }
 
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 20px 0 4px;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            padding: 7px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-weight: 600;
+            color: #333;
+            transition: background 0.2s;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        .pagination button:not(:disabled):hover {
+            background: #f0f0f0;
+        }
+
+        .page-info {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .per-page-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 20px;
+        }
+
+        .per-page-group label {
+            font-size: 13px;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .per-page-btn {
+            padding: 5px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .per-page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
         .content {
             padding: 30px;
         }
@@ -278,6 +342,18 @@
             </table>
             </div>
             <div id="empty" class="empty" style="display: none;">No stocks match the current filters.</div>
+
+            <div id="pagination" class="pagination" style="display: none;">
+                <button id="prevPage">← Prev</button>
+                <span id="pageInfo" class="page-info"></span>
+                <button id="nextPage">Next →</button>
+                <div class="per-page-group">
+                    <label>Per page:</label>
+                    <button class="per-page-btn active" data-value="10">10</button>
+                    <button class="per-page-btn" data-value="20">20</button>
+                    <button class="per-page-btn" data-value="50">50</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -285,17 +361,25 @@
         let allRows = [];
         let sortKey = 'growth';
         let sortDesc = true;
+        let currentPage = 1;
+        let currentPerPage = 10;
+        let totalPages = 1;
+        let totalSymbols = 0;
 
         const GROWTH_PRESET = { minGrowth: 10, minRisk: 4 };
 
-        const errorDiv = document.getElementById('error');
-        const loadingDiv = document.getElementById('loading');
-        const table = document.getElementById('screenerTable');
-        const tbody = document.getElementById('screenerBody');
-        const emptyDiv = document.getElementById('empty');
+        const errorDiv     = document.getElementById('error');
+        const loadingDiv   = document.getElementById('loading');
+        const table        = document.getElementById('screenerTable');
+        const tbody        = document.getElementById('screenerBody');
+        const emptyDiv     = document.getElementById('empty');
+        const paginationDiv = document.getElementById('pagination');
+        const pageInfoEl   = document.getElementById('pageInfo');
+        const prevBtn      = document.getElementById('prevPage');
+        const nextBtn      = document.getElementById('nextPage');
         const minGrowthInput = document.getElementById('minGrowth');
-        const minRiskSelect = document.getElementById('minRisk');
-        const trendSelect = document.getElementById('trend');
+        const minRiskSelect  = document.getElementById('minRisk');
+        const trendSelect    = document.getElementById('trend');
         const growthPresetBtn = document.getElementById('growthPreset');
 
         function stockSubline(r) {
@@ -426,6 +510,13 @@
             emptyDiv.style.display = rows.length ? 'none' : 'block';
         }
 
+        function renderPagination() {
+            pageInfoEl.textContent = `Page ${currentPage} of ${totalPages} (${totalSymbols.toLocaleString()} symbols)`;
+            prevBtn.disabled = currentPage <= 1;
+            nextBtn.disabled = currentPage >= totalPages;
+            paginationDiv.style.display = 'flex';
+        }
+
         function syncPresetState() {
             const f = currentFilters();
             const active = f.minGrowth === GROWTH_PRESET.minGrowth && f.minRisk === GROWTH_PRESET.minRisk;
@@ -469,20 +560,32 @@
             });
         });
 
-        async function load() {
+        async function load(page = 1, perPage = currentPerPage) {
+            loadingDiv.style.display = 'block';
+            table.style.display = 'none';
+            emptyDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            paginationDiv.style.display = 'none';
+
             try {
-                const response = await fetch('/api/screener');
-                if (!response.ok) {
-                    throw new Error('Failed to load screener data');
-                }
+                const response = await fetch(`/api/screener?page=${page}&per_page=${perPage}`);
+                if (!response.ok) throw new Error('Failed to load screener data');
+
+                const json = await response.json();
+                currentPage   = json.page;
+                currentPerPage = json.per_page;
+                totalPages    = json.last_page;
+                totalSymbols  = json.total;
+
                 // Normalize R: fundamental reliability when available, else price-based checks
-                allRows = (await response.json()).map(r => ({
+                allRows = json.data.map(r => ({
                     ...r,
                     r_score: r.reliability_max ? r.reliability_score : r.risk_score,
-                    r_max: r.reliability_max || r.risk_max,
+                    r_max:   r.reliability_max || r.risk_max,
                     r_checks: r.reliability_max ? r.reliability_checks : r.risk_checks,
                     r_fundamental: !!r.reliability_max,
                 }));
+
                 loadingDiv.style.display = 'none';
 
                 if (!allRows.length) {
@@ -492,12 +595,30 @@
                 }
 
                 render();
+                renderPagination();
             } catch (error) {
                 loadingDiv.style.display = 'none';
                 errorDiv.style.display = 'block';
                 errorDiv.textContent = 'Error: ' + error.message;
             }
         }
+
+        prevBtn.addEventListener('click', () => {
+            if (currentPage > 1) load(currentPage - 1);
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentPage < totalPages) load(currentPage + 1);
+        });
+
+        document.querySelectorAll('.per-page-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const val = parseInt(btn.dataset.value);
+                document.querySelectorAll('.per-page-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                load(1, val);
+            });
+        });
 
         load();
     </script>

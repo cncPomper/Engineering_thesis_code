@@ -191,7 +191,7 @@ The `grid` array enables "click to zoom" functionality:
 
 **To update data:**
 ```bash
-php artisan stocks:fetch --symbols=MOC,AMB --start=2026-01-01 --end=2026-07-05
+php artisan stocks:fetch --symbols=MOC.WA,AMB.WA --start=2026-01-01 --end=2026-07-05
 ```
 
 ---

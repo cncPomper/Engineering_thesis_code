@@ -5,14 +5,31 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\Signal;
 use App\Models\Stock;
+use Illuminate\Http\Request;
 
 class ScreenerController extends Controller
 {
-    public function index()
+    private const ALLOWED_PER_PAGE = [10, 20, 50];
+
+    public function index(Request $request)
     {
-        $symbols = Stock::select('symbol')->distinct()->orderBy('symbol')->pluck('symbol');
-        $companies = Company::get()->keyBy('symbol');
-        $signals = Signal::get()->keyBy('symbol');
+        $perPage = (int) $request->get('per_page', 10);
+        if (!in_array($perPage, self::ALLOWED_PER_PAGE)) {
+            $perPage = 10;
+        }
+        $page = max(1, (int) $request->get('page', 1));
+
+        $total = Stock::distinct()->count('symbol');
+
+        $symbols = Stock::select('symbol')
+            ->distinct()
+            ->orderBy('symbol')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->pluck('symbol');
+
+        $companies = Company::whereIn('symbol', $symbols)->get()->keyBy('symbol');
+        $signals   = Signal::whereIn('symbol', $symbols)->get()->keyBy('symbol');
 
         $results = [];
         foreach ($symbols as $symbol) {
@@ -20,31 +37,39 @@ class ScreenerController extends Controller
                 ->orderBy('date')
                 ->get(['date', 'close', 'high', 'low', 'volume']);
 
-            if ($rows->count() >= 2) {
-                $metrics = $this->computeMetrics($symbol, $rows);
-                $company = $companies->get($symbol);
-                $metrics['name'] = $company->name ?? null;
-                $metrics['sector'] = $company->sector ?? null;
-                $metrics['industry'] = $company->industry ?? null;
-                $metrics['revenue_growth'] = $company->revenue_growth ?? null;
-                $metrics['eps_growth'] = $company->eps_growth ?? null;
-                $metrics['reliability_score'] = $company->reliability_score ?? null;
-                $metrics['reliability_max'] = $company->reliability_max ?? null;
-                $metrics['reliability_checks'] = $company->reliability_checks ?? null;
-
-                // Donchian/ATR strategy state precomputed by "php artisan signals:compute"
-                $signal = $signals->get($symbol);
-                $metrics['trade_position'] = $signal->position ?? null;
-                $metrics['trade_entry'] = $signal->entry_price ?? null;
-                $metrics['trade_entry_date'] = $signal && $signal->entry_date ? $signal->entry_date->format('Y-m-d') : null;
-                $metrics['trade_stop'] = $signal->stop_loss ?? null;
-                $metrics['trade_stop_hit'] = $signal->stop_hit ?? false;
-
-                $results[] = $metrics;
+            if ($rows->count() < 2) {
+                continue;
             }
+
+            $metrics = $this->computeMetrics($symbol, $rows);
+
+            $company = $companies->get($symbol);
+            $metrics['name']               = $company->name ?? null;
+            $metrics['sector']             = $company->sector ?? null;
+            $metrics['industry']           = $company->industry ?? null;
+            $metrics['revenue_growth']     = $company->revenue_growth ?? null;
+            $metrics['eps_growth']         = $company->eps_growth ?? null;
+            $metrics['reliability_score']  = $company->reliability_score ?? null;
+            $metrics['reliability_max']    = $company->reliability_max ?? null;
+            $metrics['reliability_checks'] = $company->reliability_checks ?? null;
+
+            $signal = $signals->get($symbol);
+            $metrics['trade_position']   = $signal->position ?? null;
+            $metrics['trade_entry']      = $signal->entry_price ?? null;
+            $metrics['trade_entry_date'] = $signal && $signal->entry_date ? $signal->entry_date->format('Y-m-d') : null;
+            $metrics['trade_stop']       = $signal->stop_loss ?? null;
+            $metrics['trade_stop_hit']   = $signal->stop_hit ?? false;
+
+            $results[] = $metrics;
         }
 
-        return response()->json($results);
+        return response()->json([
+            'data'      => $results,
+            'total'     => $total,
+            'page'      => $page,
+            'per_page'  => $perPage,
+            'last_page' => (int) ceil($total / $perPage),
+        ]);
     }
 
     private function computeMetrics($symbol, $rows)
@@ -63,57 +88,52 @@ class ScreenerController extends Controller
             ? round((pow($lastClose / $first->close, 365 / $spanDays) - 1) * 100, 2)
             : null;
 
-        $volatility = $this->annualizedVolatility($rows->pluck('close')->all());
-        $maxDrawdown = $this->maxDrawdown($lastYear->pluck('close')->all());
-        $high52w = $lastYear->max('high');
+        $closes = $rows->pluck('close')->all();
 
-        $ema50d = $this->ema($rows->pluck('close')->all(), 50);
-        $ema200d = $this->ema($rows->pluck('close')->all(), 200);
-        $ema50w = $this->ema($this->weeklyCloses($rows), 50);
+        $volatility  = $this->annualizedVolatility($closes);
+        $maxDrawdown = $this->maxDrawdown($lastYear->pluck('close')->all());
+        $high52w     = $lastYear->max('high');
+
+        $ema50d  = $this->ema($closes, 50);
+        $ema200d = $this->ema($closes, 200);
+        $ema50w  = $this->ema($this->weeklyCloses($rows), 50);
 
         $return3m = $this->returnOverDays($rows, 91);
         $return6m = $this->returnOverDays($rows, 182);
 
-        // null = not computable with the available history (excluded from the score)
         $riskChecks = [
-            '3M return positive' => $return3m === null ? null : $return3m > 0,
-            '6M return positive' => $return6m === null ? null : $return6m > 0,
-            'Price above 50-day EMA' => $ema50d === null ? null : $lastClose > $ema50d,
+            '3M return positive'    => $return3m === null ? null : $return3m > 0,
+            '6M return positive'    => $return6m === null ? null : $return6m > 0,
+            'Price above 50-day EMA'  => $ema50d  === null ? null : $lastClose > $ema50d,
             'Price above 200-day EMA' => $ema200d === null ? null : $lastClose > $ema200d,
-            'Volatility below 40%' => $volatility === null ? null : $volatility < 40,
+            'Volatility below 40%'    => $volatility  === null ? null : $volatility < 40,
             'Max drawdown above -30%' => $maxDrawdown === null ? null : $maxDrawdown > -30,
         ];
 
-        $evaluable = array_filter($riskChecks, function ($passed) {
-            return $passed !== null;
-        });
+        $evaluable = array_filter($riskChecks, fn($v) => $v !== null);
 
         return [
-            'symbol' => $symbol,
-            'last_close' => round($lastClose, 2),
-            'first_date' => $first->date->format('Y-m-d'),
-            'last_date' => $lastDate->format('Y-m-d'),
-            'return_1m' => $this->returnOverDays($rows, 30),
-            'return_3m' => $return3m,
-            'return_6m' => $return6m,
-            'return_1y' => $this->returnOverDays($rows, 365),
-            'growth' => $growth,
-            'risk_score' => count(array_filter($evaluable)),
-            'risk_max' => count($evaluable),
+            'symbol'      => $symbol,
+            'last_close'  => round($lastClose, 2),
+            'first_date'  => $first->date->format('Y-m-d'),
+            'last_date'   => $lastDate->format('Y-m-d'),
+            'return_1m'   => $this->returnOverDays($rows, 30),
+            'return_3m'   => $return3m,
+            'return_6m'   => $return6m,
+            'return_1y'   => $this->returnOverDays($rows, 365),
+            'growth'      => $growth,
+            'risk_score'  => count(array_filter($evaluable)),
+            'risk_max'    => count($evaluable),
             'risk_checks' => $riskChecks,
-            'outlook' => $this->trendProjection($rows->pluck('close')->all()),
-            'vs_ema200' => $ema200d !== null ? round(($lastClose / $ema200d - 1) * 100, 2) : null,
-            'ema_trend' => $ema50w !== null ? ($lastClose > $ema50w ? 'UP' : 'DOWN') : null,
+            'outlook'     => $this->trendProjection($closes),
+            'vs_ema200'   => $ema200d !== null ? round(($lastClose / $ema200d - 1) * 100, 2) : null,
+            'ema_trend'   => $ema50w  !== null ? ($lastClose > $ema50w ? 'UP' : 'DOWN') : null,
             'off_52w_high' => $high52w > 0 ? round(($lastClose / $high52w - 1) * 100, 2) : null,
-            'volatility' => $volatility,
+            'volatility'  => $volatility,
             'max_drawdown' => $maxDrawdown,
         ];
     }
 
-    /**
-     * Outlook: fit a least-squares line through the last ~6 months of closes
-     * and project it 12 months (252 trading days) ahead, as % vs the last close.
-     */
     private function trendProjection(array $closes, int $window = 126, int $daysAhead = 252)
     {
         $closes = array_slice($closes, -$window);
@@ -134,7 +154,7 @@ class ScreenerController extends Controller
             $den += ($i - $xMean) ** 2;
         }
 
-        $slope = $den > 0 ? $num / $den : 0;
+        $slope     = $den > 0 ? $num / $den : 0;
         $intercept = $yMean - $slope * $xMean;
         $projected = $intercept + $slope * ($n - 1 + $daysAhead);
 
@@ -143,7 +163,7 @@ class ScreenerController extends Controller
 
     private function returnOverDays($rows, $days)
     {
-        $last = $rows->last();
+        $last   = $rows->last();
         $cutoff = $last->date->copy()->subDays($days);
 
         if ($rows->first()->date->gt($cutoff)) {
@@ -176,10 +196,8 @@ class ScreenerController extends Controller
             return null;
         }
 
-        $mean = array_sum($returns) / $n;
-        $variance = array_sum(array_map(function ($r) use ($mean) {
-            return ($r - $mean) ** 2;
-        }, $returns)) / ($n - 1);
+        $mean     = array_sum($returns) / $n;
+        $variance = array_sum(array_map(fn($r) => ($r - $mean) ** 2, $returns)) / ($n - 1);
 
         return round(sqrt($variance) * sqrt(252) * 100, 2);
     }
@@ -193,7 +211,7 @@ class ScreenerController extends Controller
         $peak = $closes[0];
         $maxDrawdown = 0;
         foreach ($closes as $close) {
-            $peak = max($peak, $close);
+            $peak        = max($peak, $close);
             $maxDrawdown = min($maxDrawdown, $close / $peak - 1);
         }
 
@@ -206,7 +224,7 @@ class ScreenerController extends Controller
             return null;
         }
 
-        $k = 2 / ($period + 1);
+        $k   = 2 / ($period + 1);
         $ema = array_sum(array_slice($values, 0, $period)) / $period;
         for ($i = $period; $i < count($values); $i++) {
             $ema = $values[$i] * $k + $ema * (1 - $k);
