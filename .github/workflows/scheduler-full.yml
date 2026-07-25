@@ -21,6 +21,14 @@ jobs:
         run: composer install --no-dev --optimize-autoloader
         working-directory: market-make
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: uv venv && uv pip install -r requirements.txt
+        working-directory: market-make
+
       - name: Fetch all prices
         run: php artisan stocks:fetch --symbols=db
         working-directory: market-make
