@@ -19,7 +19,12 @@ class FetchStockData extends Command
         $start = $this->option('start');
         $end = $this->option('end') ?? Carbon::now()->format('Y-m-d');
 
-        $this->info("Fetching stock data for: " . implode(', ', $symbols));
+        $total = count($symbols);
+        $this->info("Fetching stock data for $total symbols: " . implode(', ', $symbols));
+
+        $failed = [];
+        $noData = [];
+        $processed = 0;
 
         foreach ($symbols as $symbol) {
             $symbol = trim($symbol);
@@ -28,6 +33,7 @@ class FetchStockData extends Command
             if ($symbolStart > $end) {
                 if (Company::where('symbol', $symbol)->exists()) {
                     $this->info("✓ $symbol is already up to date (latest record: " . Carbon::parse($symbolStart)->format('Y-m-d') . ")");
+                    $processed++;
                     continue;
                 }
 
@@ -37,10 +43,35 @@ class FetchStockData extends Command
             }
 
             $this->info("Period for $symbol: $symbolStart to $end");
-            $this->fetchSymbolData($symbol, $symbolStart, $end);
+            $result = $this->fetchSymbolData($symbol, $symbolStart, $end);
+
+            if ($result === 'failed') {
+                $failed[] = $symbol;
+            } elseif ($result === 'no_data') {
+                $noData[] = $symbol;
+            } else {
+                $processed++;
+            }
         }
 
-        $this->info('Stock data fetch completed!');
+        $this->info('');
+        $this->info("=== Fetch summary ===");
+        $this->info("Processed : $processed / $total");
+
+        if (!empty($noData)) {
+            $this->warn("No data    : " . implode(', ', $noData));
+        }
+
+        if (!empty($failed)) {
+            $this->error("Failed     : " . implode(', ', $failed));
+        }
+
+        if (empty($failed)) {
+            $this->info('Stock data fetch completed successfully!');
+        } else {
+            $this->error('Stock data fetch completed with errors.');
+            return 1;
+        }
     }
 
     /**
@@ -103,7 +134,7 @@ class FetchStockData extends Command
         if (!$process->isSuccessful()) {
             $this->error("Failed to fetch data for $symbol");
             $this->error($process->getErrorOutput());
-            return;
+            return 'failed';
         }
 
         $payload = json_decode($process->getOutput(), true);
@@ -124,7 +155,7 @@ class FetchStockData extends Command
 
         if (empty($data)) {
             $this->warn("No data found for $symbol");
-            return;
+            return 'no_data';
         }
 
         $existingDates = Stock::where('symbol', $symbol)
@@ -178,6 +209,7 @@ class FetchStockData extends Command
             $summary .= ", $skipped already in database (use --force to refresh)";
         }
         $this->info($summary);
+        return 'ok';
     }
 
     private function updateDataRange($symbol)
