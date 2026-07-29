@@ -111,8 +111,17 @@ class FetchStockData extends Command
     private function fetchSymbolData($symbol, $start, $end)
     {
         $pythonScript = base_path('scripts/fetch_stock_data.py');
+        $command = ['uv', 'run', $pythonScript, $symbol, $start, $end];
 
-        $process = new Process(['uv', 'run', $pythonScript, $symbol, $start, $end]);
+        $virtualEnv = getenv('VIRTUAL_ENV');
+        if (!empty($virtualEnv)) {
+            $venvPython = rtrim($virtualEnv, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'python';
+            if (is_file($venvPython) && is_executable($venvPython)) {
+                $command = [$venvPython, $pythonScript, $symbol, $start, $end];
+            }
+        }
+
+        $process = new Process($command);
 
         $process->run();
 
