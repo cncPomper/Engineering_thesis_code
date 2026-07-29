@@ -28,6 +28,10 @@ jobs:
       - name: Install Python dependencies
         run: uv venv && uv pip install -r requirements.txt
         working-directory: market-make
+        env:
+          # setup-uv points VIRTUAL_ENV at the repo root; the artisan command
+          # looks for the venv at market-make/.venv, so create it there instead
+          VIRTUAL_ENV: ${{ github.workspace }}/market-make/.venv
 
       - name: Fetch WSE prices
         run: php artisan stocks:fetch --symbols=db:.WA
