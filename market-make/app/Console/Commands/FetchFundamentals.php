@@ -34,16 +34,7 @@ class FetchFundamentals extends Command
     {
         $pythonScript = base_path('scripts/fetch_fundamentals.py');
 
-        // Use Python from virtual environment if it exists
-        $pythonPath = base_path('.venv/Scripts/python.exe');
-        if (!file_exists($pythonPath)) {
-            $pythonPath = base_path('.venv/bin/python');
-        }
-        if (!file_exists($pythonPath)) {
-            $pythonPath = 'python';
-        }
-
-        $process = new Process([$pythonPath, $pythonScript, $symbol]);
+        $process = new Process(['uv', 'run', $pythonScript, $symbol]);
         $process->run();
 
         if (!$process->isSuccessful()) {
