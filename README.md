@@ -2,6 +2,8 @@
 
 ## Author: Piotr Kitłowski
 
+[![WSE pipeline (Warsaw close)](https://github.com/cncPomper/Engineering_thesis_code/actions/workflows/scheduler-wse.yml/badge.svg)](https://github.com/cncPomper/Engineering_thesis_code/actions/workflows/scheduler-wse.yml)
+
 Research code and applications for stock market data analysis, forecasting and
 visualization.
 
