@@ -30,6 +30,7 @@ jobs:
           uv venv --python 3.11 .venv
           uv pip install -r requirements.txt
         working-directory: market-make
+
       - name: Fetch all prices
         run: php artisan stocks:fetch --symbols=db
         working-directory: market-make
